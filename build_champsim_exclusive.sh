@@ -13,8 +13,6 @@ else
 fi
 # ... rest of your build script ...
 
-
-
 # if [ "$#" -lt 18 ]; then
 #     echo "Illegal number of parameters"
 #     echo "Usage: ./build_champsim.sh [branch_pred] [l1i_pref] [l1d_pref]
@@ -27,26 +25,25 @@ fi
 # ChampSim configuration
 # ChampSim configuration (hardcoded)
 
-BRANCH="hashed_perceptron"    # branch predictor
-L1I_PREFETCHER="no"       # L1I prefetcher
-L1D_PREFETCHER="no" # L1D prefetcher
-L2C_PREFETCHER=$1    # L2C prefetcher
-LLC_PREFETCHER="no" # LLC prefetcher
-ITLB_PREFETCHER="no"      # ITLB prefetcher
-DTLB_PREFETCHER="no"      # DTLB prefetcher
-STLB_PREFETCHER="no"      # STLB prefetcher
+BRANCH="hashed_perceptron" # branch predictor
+L1I_PREFETCHER="no"        # L1I prefetcher
+L1D_PREFETCHER="no"        # L1D prefetcher
+L2C_PREFETCHER=$1          # L2C prefetcher
+LLC_PREFETCHER="no"        # LLC prefetcher
+ITLB_PREFETCHER="no"       # ITLB prefetcher
+DTLB_PREFETCHER="no"       # DTLB prefetcher
+STLB_PREFETCHER="no"       # STLB prefetcher
 
-BTB_REPLACEMENT="lru"       # BTB replacement
-L1I_REPLACEMENT="lru"    # L1I replacement
-L1D_REPLACEMENT="lru"    # L1D replacement
-L2C_REPLACEMENT="lru"    # L2C replacement
-LLC_REPLACEMENT="lru"    # LLC replacement
-ITLB_REPLACEMENT="lru"   # ITLB replacement
-DTLB_REPLACEMENT="lru"   # DTLB replacement
-STLB_REPLACEMENT="lru"   # STLB replacement
+BTB_REPLACEMENT="lru"  # BTB replacement
+L1I_REPLACEMENT="lru"  # L1I replacement
+L1D_REPLACEMENT="lru"  # L1D replacement
+L2C_REPLACEMENT="lru"  # L2C replacement
+LLC_REPLACEMENT="lru"  # LLC replacement
+ITLB_REPLACEMENT="lru" # ITLB replacement
+DTLB_REPLACEMENT="lru" # DTLB replacement
+STLB_REPLACEMENT="lru" # STLB replacement
 
-NUM_CORE=1                           # tested up to 8-core system
-
+NUM_CORE=1 # tested up to 8-core system
 
 # BRANCH=$1           # branch/*.bpred
 # L1I_PREFETCHER=$2   # prefetcher/*.l1i_pref
@@ -57,7 +54,7 @@ NUM_CORE=1                           # tested up to 8-core system
 # DTLB_PREFETCHER=$7  # prefetcher/*.dtlb_pref
 # STLB_PREFETCHER=$8  # prefetcher/*.stlb_pref
 
-# BTB_REPLACEMENT=$9 	   # prefetcher/*.btb_repl	
+# BTB_REPLACEMENT=$9 	   # prefetcher/*.btb_repl
 # L1I_REPLACEMENT=${10}   # prefetcher/*.l1i_repl
 # L1D_REPLACEMENT=${11}   # prefetcher/*.l1d_repl
 # L2C_REPLACEMENT=${12}   # prefetcher/*.l2c_repl
@@ -76,123 +73,120 @@ NORMAL=$(tput sgr0)
 # Sanity check
 if [ ! -f ./branch/${BRANCH}.bpred ]; then
     echo "[ERROR] Cannot find branch predictor"
-	echo "[ERROR] Possible branch predictors from branch/*.bpred "
+    echo "[ERROR] Possible branch predictors from branch/*.bpred "
     find branch -name "*.bpred"
     exit 1
 fi
 
 if [ ! -f ./prefetcher/${L1I_PREFETCHER}.l1i_pref ]; then
-	echo "[ERROR] Cannot find L1I prefetcher"
-	echo "[ERROR] Possible L1I prefetchers from prefetcher/*.l1i_pref "
-	find prefetcher -name "*.l1i_pref"
-	exit 1
+    echo "[ERROR] Cannot find L1I prefetcher"
+    echo "[ERROR] Possible L1I prefetchers from prefetcher/*.l1i_pref "
+    find prefetcher -name "*.l1i_pref"
+    exit 1
 fi
-
 
 if [ ! -f ./prefetcher/${L1D_PREFETCHER}.l1d_pref ]; then
     echo "[ERROR] Cannot find L1D prefetcher"
-	echo "[ERROR] Possible L1D prefetchers from prefetcher/*.l1d_pref "
+    echo "[ERROR] Possible L1D prefetchers from prefetcher/*.l1d_pref "
     find prefetcher -name "*.l1d_pref"
     exit 1
 fi
 
 if [ ! -f ./prefetcher/${L2C_PREFETCHER}.l2c_pref ]; then
     echo "[ERROR] Cannot find L2C prefetcher"
-	echo "[ERROR] Possible L2C prefetchers from prefetcher/*.l2c_pref "
+    echo "[ERROR] Possible L2C prefetchers from prefetcher/*.l2c_pref "
     find prefetcher -name "*.l2c_pref"
     exit 1
 fi
 
 if [ ! -f ./prefetcher/${LLC_PREFETCHER}.llc_pref ]; then
     echo "[ERROR] Cannot find LLC prefetcher"
-	echo "[ERROR] Possible LLC prefetchers from prefetcher/*.llc_pref "
+    echo "[ERROR] Possible LLC prefetchers from prefetcher/*.llc_pref "
     find prefetcher -name "*.llc_pref"
     exit 1
 fi
 
 if [ ! -f ./prefetcher/${ITLB_PREFETCHER}.itlb_pref ]; then
     echo "[ERROR] Cannot find ITLB prefetcher"
-	echo "[ERROR] Possible ITLB prefetchers from prefetcher/*.itlb_pref "
+    echo "[ERROR] Possible ITLB prefetchers from prefetcher/*.itlb_pref "
     find prefetcher -name "*.itlb_pref"
     exit 1
 fi
 
 if [ ! -f ./prefetcher/${DTLB_PREFETCHER}.dtlb_pref ]; then
     echo "[ERROR] Cannot find DTLB prefetcher"
-        echo "[ERROR] Possible DTLB prefetchers from prefetcher/*.dtlb_pref "
+    echo "[ERROR] Possible DTLB prefetchers from prefetcher/*.dtlb_pref "
     find prefetcher -name "*.dtlb_pref"
     exit 1
 fi
 
 if [ ! -f ./prefetcher/${STLB_PREFETCHER}.stlb_pref ]; then
     echo "[ERROR] Cannot find STLB prefetcher"
-        echo "[ERROR] Possible STLB prefetchers from prefetcher/*.stlb_pref "
+    echo "[ERROR] Possible STLB prefetchers from prefetcher/*.stlb_pref "
     find prefetcher -name "*.stlb_pref"
     exit 1
 fi
 
 if [ ! -f ./replacement/${BTB_REPLACEMENT}.btb_repl ]; then
     echo "[ERROR] Cannot find BTB replacement policy"
-        echo "[ERROR] Possible BTB replacement policy from replacement/*.btb_repl"
+    echo "[ERROR] Possible BTB replacement policy from replacement/*.btb_repl"
     find replacement -name "*.btb_repl"
     exit 1
 fi
 
 if [ ! -f ./replacement/${L1I_REPLACEMENT}.l1i_repl ]; then
     echo "[ERROR] Cannot find L1I replacement policy"
-	echo "[ERROR] Possible L1I replacement policy from replacement/*.l1i_repl"
+    echo "[ERROR] Possible L1I replacement policy from replacement/*.l1i_repl"
     find replacement -name "*.l1i_repl"
     exit 1
 fi
 
 if [ ! -f ./replacement/${L1D_REPLACEMENT}.l1d_repl ]; then
     echo "[ERROR] Cannot find L1D replacement policy"
-        echo "[ERROR] Possible L1D replacement policy from replacement/*.l1d_repl"
+    echo "[ERROR] Possible L1D replacement policy from replacement/*.l1d_repl"
     find replacement -name "*.l1d_repl"
     exit 1
 fi
 
 if [ ! -f ./replacement/${L2C_REPLACEMENT}.l2c_repl ]; then
     echo "[ERROR] Cannot find L2C replacement policy"
-	echo "[ERROR] Possible L2C replacement policy from replacement/*.l2c_repl"
+    echo "[ERROR] Possible L2C replacement policy from replacement/*.l2c_repl"
     find replacement -name "*.l2c_repl"
     exit 1
 fi
 
 if [ ! -f ./replacement/${LLC_REPLACEMENT}.llc_repl ]; then
     echo "[ERROR] Cannot find LLC replacement policy"
-        echo "[ERROR] Possible LLC replacement policy from replacement/*.llc_repl"
+    echo "[ERROR] Possible LLC replacement policy from replacement/*.llc_repl"
     find replacement -name "*.llc_repl"
     exit 1
 fi
 
 if [ ! -f ./replacement/${ITLB_REPLACEMENT}.itlb_repl ]; then
     echo "[ERROR] Cannot find ITLB replacement policy"
-	echo "[ERROR] Possible ITLB replacement policy from replacement/*.itlb_repl"
+    echo "[ERROR] Possible ITLB replacement policy from replacement/*.itlb_repl"
     find replacement -name "*.itlb_repl"
     exit 1
 fi
 
 if [ ! -f ./replacement/${DTLB_REPLACEMENT}.dtlb_repl ]; then
     echo "[ERROR] Cannot find DTLB replacement policy"
-        echo "[ERROR] Possible DTLB replacement policy from replacement/*.dtlb_repl"
+    echo "[ERROR] Possible DTLB replacement policy from replacement/*.dtlb_repl"
     find replacement -name "*.dtlb_repl"
     exit 1
 fi
 
 if [ ! -f ./replacement/${STLB_REPLACEMENT}.stlb_repl ]; then
     echo "[ERROR] Cannot find STLB replacement policy"
-	echo "[ERROR] Possible STLB replacement policy from replacement/*.stlb_repl"
+    echo "[ERROR] Possible STLB replacement policy from replacement/*.stlb_repl"
     find replacement -name "*.stlb_repl"
     exit 1
 fi
 
-
-
 # Check num_core
 re='^[0-9]+$'
-if ! [[ $NUM_CORE =~ $re ]] ; then
-    echo "[ERROR]: num_core is NOT a number" >&2;
+if ! [[ $NUM_CORE =~ $re ]]; then
+    echo "[ERROR]: num_core is NOT a number" >&2
     exit 1
 fi
 
@@ -230,8 +224,6 @@ cp replacement/${ITLB_REPLACEMENT}.itlb_repl replacement/itlb_replacement.cc
 cp replacement/${DTLB_REPLACEMENT}.dtlb_repl replacement/dtlb_replacement.cc
 cp replacement/${STLB_REPLACEMENT}.stlb_repl replacement/stlb_replacement.cc
 
-
-
 # Build
 mkdir -p bin
 rm -f bin/champsim
@@ -239,7 +231,7 @@ make clean
 if [ "$#" -eq 19 ]; then
     make CC=${19} CCX=${19}
 else
-    make
+    bear -- make
 fi
 
 # Sanity check
@@ -275,7 +267,6 @@ BINARY_NAME="champsim-exclusive-${L2C_PREFETCHER}"
 echo "Binary: bin/${BINARY_NAME}"
 echo ""
 mv bin/champsim bin/${BINARY_NAME}
-
 
 # Restore to the default configuration
 sed -i.bak 's/\<NUM_CPUS '${NUM_CORE}'\>/NUM_CPUS 1/g' inc/champsim.h

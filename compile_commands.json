@@ -1,0 +1,434 @@
+[
+  {
+    "arguments": [
+      "/usr/bin/c++",
+      "-Wall",
+      "-g",
+      "-std=c++11",
+      "-O3",
+      "-c",
+      "-g",
+      "-Iinc",
+      "-o",
+      "obj/src/main.o",
+      "src/main.cc"
+    ],
+    "directory": "/Users/flameberry/Developer/IITB/CS683/CS683PA2/CS683PA2",
+    "file": "/Users/flameberry/Developer/IITB/CS683/CS683PA2/CS683PA2/src/main.cc",
+    "output": "/Users/flameberry/Developer/IITB/CS683/CS683PA2/CS683PA2/obj/src/main.o"
+  },
+  {
+    "arguments": [
+      "/usr/bin/c++",
+      "-Wall",
+      "-g",
+      "-std=c++11",
+      "-O3",
+      "-c",
+      "-g",
+      "-Iinc",
+      "-o",
+      "obj/src/uncore.o",
+      "src/uncore.cc"
+    ],
+    "directory": "/Users/flameberry/Developer/IITB/CS683/CS683PA2/CS683PA2",
+    "file": "/Users/flameberry/Developer/IITB/CS683/CS683PA2/CS683PA2/src/uncore.cc",
+    "output": "/Users/flameberry/Developer/IITB/CS683/CS683PA2/CS683PA2/obj/src/uncore.o"
+  },
+  {
+    "arguments": [
+      "/usr/bin/c++",
+      "-Wall",
+      "-g",
+      "-std=c++11",
+      "-O3",
+      "-c",
+      "-g",
+      "-Iinc",
+      "-o",
+      "obj/src/block.o",
+      "src/block.cc"
+    ],
+    "directory": "/Users/flameberry/Developer/IITB/CS683/CS683PA2/CS683PA2",
+    "file": "/Users/flameberry/Developer/IITB/CS683/CS683PA2/CS683PA2/src/block.cc",
+    "output": "/Users/flameberry/Developer/IITB/CS683/CS683PA2/CS683PA2/obj/src/block.o"
+  },
+  {
+    "arguments": [
+      "/usr/bin/c++",
+      "-Wall",
+      "-g",
+      "-std=c++11",
+      "-O3",
+      "-c",
+      "-g",
+      "-Iinc",
+      "-o",
+      "obj/src/page_table_walker.o",
+      "src/page_table_walker.cc"
+    ],
+    "directory": "/Users/flameberry/Developer/IITB/CS683/CS683PA2/CS683PA2",
+    "file": "/Users/flameberry/Developer/IITB/CS683/CS683PA2/CS683PA2/src/page_table_walker.cc",
+    "output": "/Users/flameberry/Developer/IITB/CS683/CS683PA2/CS683PA2/obj/src/page_table_walker.o"
+  },
+  {
+    "arguments": [
+      "/usr/bin/c++",
+      "-Wall",
+      "-g",
+      "-std=c++11",
+      "-O3",
+      "-c",
+      "-g",
+      "-Iinc",
+      "-o",
+      "obj/src/ooo_cpu.o",
+      "src/ooo_cpu.cc"
+    ],
+    "directory": "/Users/flameberry/Developer/IITB/CS683/CS683PA2/CS683PA2",
+    "file": "/Users/flameberry/Developer/IITB/CS683/CS683PA2/CS683PA2/src/ooo_cpu.cc",
+    "output": "/Users/flameberry/Developer/IITB/CS683/CS683PA2/CS683PA2/obj/src/ooo_cpu.o"
+  },
+  {
+    "arguments": [
+      "/usr/bin/c++",
+      "-Wall",
+      "-g",
+      "-std=c++11",
+      "-O3",
+      "-c",
+      "-g",
+      "-Iinc",
+      "-o",
+      "obj/src/cache.o",
+      "src/cache.cc"
+    ],
+    "directory": "/Users/flameberry/Developer/IITB/CS683/CS683PA2/CS683PA2",
+    "file": "/Users/flameberry/Developer/IITB/CS683/CS683PA2/CS683PA2/src/cache.cc",
+    "output": "/Users/flameberry/Developer/IITB/CS683/CS683PA2/CS683PA2/obj/src/cache.o"
+  },
+  {
+    "arguments": [
+      "/usr/bin/c++",
+      "-Wall",
+      "-g",
+      "-std=c++11",
+      "-O3",
+      "-c",
+      "-g",
+      "-Iinc",
+      "-o",
+      "obj/src/dram_controller.o",
+      "src/dram_controller.cc"
+    ],
+    "directory": "/Users/flameberry/Developer/IITB/CS683/CS683PA2/CS683PA2",
+    "file": "/Users/flameberry/Developer/IITB/CS683/CS683PA2/CS683PA2/src/dram_controller.cc",
+    "output": "/Users/flameberry/Developer/IITB/CS683/CS683PA2/CS683PA2/obj/src/dram_controller.o"
+  },
+  {
+    "arguments": [
+      "/usr/bin/c++",
+      "-Wall",
+      "-g",
+      "-std=c++11",
+      "-O3",
+      "-c",
+      "-g",
+      "-Iinc",
+      "-o",
+      "obj/branch/branch_predictor.o",
+      "branch/branch_predictor.cc"
+    ],
+    "directory": "/Users/flameberry/Developer/IITB/CS683/CS683PA2/CS683PA2",
+    "file": "/Users/flameberry/Developer/IITB/CS683/CS683PA2/CS683PA2/branch/branch_predictor.cc",
+    "output": "/Users/flameberry/Developer/IITB/CS683/CS683PA2/CS683PA2/obj/branch/branch_predictor.o"
+  },
+  {
+    "arguments": [
+      "/usr/bin/c++",
+      "-Wall",
+      "-g",
+      "-std=c++11",
+      "-O3",
+      "-c",
+      "-g",
+      "-Iinc",
+      "-o",
+      "obj/replacement/l2c_replacement.o",
+      "replacement/l2c_replacement.cc"
+    ],
+    "directory": "/Users/flameberry/Developer/IITB/CS683/CS683PA2/CS683PA2",
+    "file": "/Users/flameberry/Developer/IITB/CS683/CS683PA2/CS683PA2/replacement/l2c_replacement.cc",
+    "output": "/Users/flameberry/Developer/IITB/CS683/CS683PA2/CS683PA2/obj/replacement/l2c_replacement.o"
+  },
+  {
+    "arguments": [
+      "/usr/bin/c++",
+      "-Wall",
+      "-g",
+      "-std=c++11",
+      "-O3",
+      "-c",
+      "-g",
+      "-Iinc",
+      "-o",
+      "obj/replacement/btb_replacement.o",
+      "replacement/btb_replacement.cc"
+    ],
+    "directory": "/Users/flameberry/Developer/IITB/CS683/CS683PA2/CS683PA2",
+    "file": "/Users/flameberry/Developer/IITB/CS683/CS683PA2/CS683PA2/replacement/btb_replacement.cc",
+    "output": "/Users/flameberry/Developer/IITB/CS683/CS683PA2/CS683PA2/obj/replacement/btb_replacement.o"
+  },
+  {
+    "arguments": [
+      "/usr/bin/c++",
+      "-Wall",
+      "-g",
+      "-std=c++11",
+      "-O3",
+      "-c",
+      "-g",
+      "-Iinc",
+      "-o",
+      "obj/replacement/base_replacement.o",
+      "replacement/base_replacement.cc"
+    ],
+    "directory": "/Users/flameberry/Developer/IITB/CS683/CS683PA2/CS683PA2",
+    "file": "/Users/flameberry/Developer/IITB/CS683/CS683PA2/CS683PA2/replacement/base_replacement.cc",
+    "output": "/Users/flameberry/Developer/IITB/CS683/CS683PA2/CS683PA2/obj/replacement/base_replacement.o"
+  },
+  {
+    "arguments": [
+      "/usr/bin/c++",
+      "-Wall",
+      "-g",
+      "-std=c++11",
+      "-O3",
+      "-c",
+      "-g",
+      "-Iinc",
+      "-o",
+      "obj/replacement/itlb_replacement.o",
+      "replacement/itlb_replacement.cc"
+    ],
+    "directory": "/Users/flameberry/Developer/IITB/CS683/CS683PA2/CS683PA2",
+    "file": "/Users/flameberry/Developer/IITB/CS683/CS683PA2/CS683PA2/replacement/itlb_replacement.cc",
+    "output": "/Users/flameberry/Developer/IITB/CS683/CS683PA2/CS683PA2/obj/replacement/itlb_replacement.o"
+  },
+  {
+    "arguments": [
+      "/usr/bin/c++",
+      "-Wall",
+      "-g",
+      "-std=c++11",
+      "-O3",
+      "-c",
+      "-g",
+      "-Iinc",
+      "-o",
+      "obj/replacement/stlb_replacement.o",
+      "replacement/stlb_replacement.cc"
+    ],
+    "directory": "/Users/flameberry/Developer/IITB/CS683/CS683PA2/CS683PA2",
+    "file": "/Users/flameberry/Developer/IITB/CS683/CS683PA2/CS683PA2/replacement/stlb_replacement.cc",
+    "output": "/Users/flameberry/Developer/IITB/CS683/CS683PA2/CS683PA2/obj/replacement/stlb_replacement.o"
+  },
+  {
+    "arguments": [
+      "/usr/bin/c++",
+      "-Wall",
+      "-g",
+      "-std=c++11",
+      "-O3",
+      "-c",
+      "-g",
+      "-Iinc",
+      "-o",
+      "obj/replacement/dtlb_replacement.o",
+      "replacement/dtlb_replacement.cc"
+    ],
+    "directory": "/Users/flameberry/Developer/IITB/CS683/CS683PA2/CS683PA2",
+    "file": "/Users/flameberry/Developer/IITB/CS683/CS683PA2/CS683PA2/replacement/dtlb_replacement.cc",
+    "output": "/Users/flameberry/Developer/IITB/CS683/CS683PA2/CS683PA2/obj/replacement/dtlb_replacement.o"
+  },
+  {
+    "arguments": [
+      "/usr/bin/c++",
+      "-Wall",
+      "-g",
+      "-std=c++11",
+      "-O3",
+      "-c",
+      "-g",
+      "-Iinc",
+      "-o",
+      "obj/replacement/llc_replacement.o",
+      "replacement/llc_replacement.cc"
+    ],
+    "directory": "/Users/flameberry/Developer/IITB/CS683/CS683PA2/CS683PA2",
+    "file": "/Users/flameberry/Developer/IITB/CS683/CS683PA2/CS683PA2/replacement/llc_replacement.cc",
+    "output": "/Users/flameberry/Developer/IITB/CS683/CS683PA2/CS683PA2/obj/replacement/llc_replacement.o"
+  },
+  {
+    "arguments": [
+      "/usr/bin/c++",
+      "-Wall",
+      "-g",
+      "-std=c++11",
+      "-O3",
+      "-c",
+      "-g",
+      "-Iinc",
+      "-o",
+      "obj/replacement/l1d_replacement.o",
+      "replacement/l1d_replacement.cc"
+    ],
+    "directory": "/Users/flameberry/Developer/IITB/CS683/CS683PA2/CS683PA2",
+    "file": "/Users/flameberry/Developer/IITB/CS683/CS683PA2/CS683PA2/replacement/l1d_replacement.cc",
+    "output": "/Users/flameberry/Developer/IITB/CS683/CS683PA2/CS683PA2/obj/replacement/l1d_replacement.o"
+  },
+  {
+    "arguments": [
+      "/usr/bin/c++",
+      "-Wall",
+      "-g",
+      "-std=c++11",
+      "-O3",
+      "-c",
+      "-g",
+      "-Iinc",
+      "-o",
+      "obj/replacement/l1i_replacement.o",
+      "replacement/l1i_replacement.cc"
+    ],
+    "directory": "/Users/flameberry/Developer/IITB/CS683/CS683PA2/CS683PA2",
+    "file": "/Users/flameberry/Developer/IITB/CS683/CS683PA2/CS683PA2/replacement/l1i_replacement.cc",
+    "output": "/Users/flameberry/Developer/IITB/CS683/CS683PA2/CS683PA2/obj/replacement/l1i_replacement.o"
+  },
+  {
+    "arguments": [
+      "/usr/bin/c++",
+      "-Wall",
+      "-g",
+      "-std=c++11",
+      "-O3",
+      "-c",
+      "-g",
+      "-Iinc",
+      "-o",
+      "obj/prefetcher/l1i_prefetcher.o",
+      "prefetcher/l1i_prefetcher.cc"
+    ],
+    "directory": "/Users/flameberry/Developer/IITB/CS683/CS683PA2/CS683PA2",
+    "file": "/Users/flameberry/Developer/IITB/CS683/CS683PA2/CS683PA2/prefetcher/l1i_prefetcher.cc",
+    "output": "/Users/flameberry/Developer/IITB/CS683/CS683PA2/CS683PA2/obj/prefetcher/l1i_prefetcher.o"
+  },
+  {
+    "arguments": [
+      "/usr/bin/c++",
+      "-Wall",
+      "-g",
+      "-std=c++11",
+      "-O3",
+      "-c",
+      "-g",
+      "-Iinc",
+      "-o",
+      "obj/prefetcher/l2c_prefetcher.o",
+      "prefetcher/l2c_prefetcher.cc"
+    ],
+    "directory": "/Users/flameberry/Developer/IITB/CS683/CS683PA2/CS683PA2",
+    "file": "/Users/flameberry/Developer/IITB/CS683/CS683PA2/CS683PA2/prefetcher/l2c_prefetcher.cc",
+    "output": "/Users/flameberry/Developer/IITB/CS683/CS683PA2/CS683PA2/obj/prefetcher/l2c_prefetcher.o"
+  },
+  {
+    "arguments": [
+      "/usr/bin/c++",
+      "-Wall",
+      "-g",
+      "-std=c++11",
+      "-O3",
+      "-c",
+      "-g",
+      "-Iinc",
+      "-o",
+      "obj/prefetcher/dtlb_prefetcher.o",
+      "prefetcher/dtlb_prefetcher.cc"
+    ],
+    "directory": "/Users/flameberry/Developer/IITB/CS683/CS683PA2/CS683PA2",
+    "file": "/Users/flameberry/Developer/IITB/CS683/CS683PA2/CS683PA2/prefetcher/dtlb_prefetcher.cc",
+    "output": "/Users/flameberry/Developer/IITB/CS683/CS683PA2/CS683PA2/obj/prefetcher/dtlb_prefetcher.o"
+  },
+  {
+    "arguments": [
+      "/usr/bin/c++",
+      "-Wall",
+      "-g",
+      "-std=c++11",
+      "-O3",
+      "-c",
+      "-g",
+      "-Iinc",
+      "-o",
+      "obj/prefetcher/l1d_prefetcher.o",
+      "prefetcher/l1d_prefetcher.cc"
+    ],
+    "directory": "/Users/flameberry/Developer/IITB/CS683/CS683PA2/CS683PA2",
+    "file": "/Users/flameberry/Developer/IITB/CS683/CS683PA2/CS683PA2/prefetcher/l1d_prefetcher.cc",
+    "output": "/Users/flameberry/Developer/IITB/CS683/CS683PA2/CS683PA2/obj/prefetcher/l1d_prefetcher.o"
+  },
+  {
+    "arguments": [
+      "/usr/bin/c++",
+      "-Wall",
+      "-g",
+      "-std=c++11",
+      "-O3",
+      "-c",
+      "-g",
+      "-Iinc",
+      "-o",
+      "obj/prefetcher/stlb_prefetcher.o",
+      "prefetcher/stlb_prefetcher.cc"
+    ],
+    "directory": "/Users/flameberry/Developer/IITB/CS683/CS683PA2/CS683PA2",
+    "file": "/Users/flameberry/Developer/IITB/CS683/CS683PA2/CS683PA2/prefetcher/stlb_prefetcher.cc",
+    "output": "/Users/flameberry/Developer/IITB/CS683/CS683PA2/CS683PA2/obj/prefetcher/stlb_prefetcher.o"
+  },
+  {
+    "arguments": [
+      "/usr/bin/c++",
+      "-Wall",
+      "-g",
+      "-std=c++11",
+      "-O3",
+      "-c",
+      "-g",
+      "-Iinc",
+      "-o",
+      "obj/prefetcher/llc_prefetcher.o",
+      "prefetcher/llc_prefetcher.cc"
+    ],
+    "directory": "/Users/flameberry/Developer/IITB/CS683/CS683PA2/CS683PA2",
+    "file": "/Users/flameberry/Developer/IITB/CS683/CS683PA2/CS683PA2/prefetcher/llc_prefetcher.cc",
+    "output": "/Users/flameberry/Developer/IITB/CS683/CS683PA2/CS683PA2/obj/prefetcher/llc_prefetcher.o"
+  },
+  {
+    "arguments": [
+      "/usr/bin/c++",
+      "-Wall",
+      "-g",
+      "-std=c++11",
+      "-O3",
+      "-c",
+      "-g",
+      "-Iinc",
+      "-o",
+      "obj/prefetcher/itlb_prefetcher.o",
+      "prefetcher/itlb_prefetcher.cc"
+    ],
+    "directory": "/Users/flameberry/Developer/IITB/CS683/CS683PA2/CS683PA2",
+    "file": "/Users/flameberry/Developer/IITB/CS683/CS683PA2/CS683PA2/prefetcher/itlb_prefetcher.cc",
+    "output": "/Users/flameberry/Developer/IITB/CS683/CS683PA2/CS683PA2/obj/prefetcher/itlb_prefetcher.o"
+  }
+]
