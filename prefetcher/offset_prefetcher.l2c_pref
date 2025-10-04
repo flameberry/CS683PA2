@@ -1,22 +1,264 @@
 #include "cache.h"
+#include <cstring>
+#include <algorithm>
+#include <iostream>
 
+#define REGION_TABLE_SIZE 64
+#define MAX_OFFSETS_PER_REGION 5
+#define PREFETCH_DEGREE_MAX 4
+#define ACCURACY_THRESHOLD 0.5
+#define MIN_CONFIDENCE 2
 
-void CACHE::l2c_prefetcher_initialize() 
-{
-    cout << "CPU " << cpu << " Region based L2 offset prefetcher" << endl;
+using namespace std;
+
+struct OffsetEntry {
+    int offset;
+    int frequency;
+
+    OffsetEntry() : offset(0), frequency(0) {}
+    OffsetEntry(int off, int freq) : offset(off), frequency(freq) {}
+};
+
+struct RegionEntry {
+    uint64_t page_signature;
+    uint64_t last_offset;
+    OffsetEntry offsets[MAX_OFFSETS_PER_REGION];
+    uint32_t prefetches_issued;
+    uint32_t prefetches_useful;
+    uint32_t lru;
+
+    RegionEntry() : page_signature(0), last_offset(0), prefetches_issued(0),
+                    prefetches_useful(0), lru(0) {
+        memset(offsets, 0, sizeof(offsets));
+    }
+
+    double checkAccuracy() const {
+        if (prefetches_issued == 0) return 0.0;
+        return (double)prefetches_useful / prefetches_issued;
+    }
+
+    int getPrefetchDegree() const {
+        double accuracy = checkAccuracy();
+        if (accuracy >= 0.75) return 4;      // High accuracy
+        else if (accuracy >= 0.5) return 2;  // Medium accuracy
+        else if (accuracy >= 0.25) return 1; // Low accuracy
+        else return 0;                       // Very low, no prefetch
+    }
+};
+
+// Global region table
+static RegionEntry region_table[REGION_TABLE_SIZE];
+static uint32_t access_counter = 0;
+static uint64_t total_prefetches_issued = 0;
+static uint64_t total_prefetches_useful = 0;
+
+// Helper functions to extract page number and page offset
+uint64_t get_page_number(uint64_t addr) {
+    return addr >> LOG2_PAGE_SIZE;
 }
 
-uint32_t CACHE::l2c_prefetcher_operate(uint64_t addr, uint64_t ip, uint8_t cache_hit, uint8_t type, uint32_t metadata_in, uint8_t critical_ip_flag)
-{
-   
+uint64_t get_page_offset(uint64_t addr) {
+    return (addr >> LOG2_BLOCK_SIZE) & ((1 << (LOG2_PAGE_SIZE - LOG2_BLOCK_SIZE)) - 1);
 }
 
-uint32_t CACHE::l2c_prefetcher_cache_fill(uint64_t addr, uint32_t set, uint32_t match, uint8_t prefetch, uint64_t evicted_addr, uint32_t metadata_in)
-{
-  return metadata_in;
+// Prefetcher initialization
+void CACHE::l2c_prefetcher_initialize() {
+    cout << "CPU " << cpu << " Region-based L2 offset prefetcher initialized" << endl;
+    cout << "Region table size: " << REGION_TABLE_SIZE << " entries" << endl;
+
+    access_counter = 0;
+    total_prefetches_issued = 0;
+    total_prefetches_useful = 0;
+    memset(region_table, 0, sizeof(region_table));
 }
 
-void CACHE::l2c_prefetcher_final_stats()
-{
+// Core prefetcher operate function
+uint32_t CACHE::l2c_prefetcher_operate(uint64_t addr, uint64_t ip, uint8_t cache_hit,
+                                       uint8_t type, uint32_t metadata_in, uint8_t critical_ip_flag) {
+    if (type != LOAD)
+        return metadata_in;
 
+    uint64_t page_num = get_page_number(addr);
+    uint64_t page_offset = get_page_offset(addr);
+
+    // Find region entry or replace LRU
+    int region_id = -1;
+    uint32_t min_lru = UINT32_MAX;
+    int lru_index = 0;
+
+    for (int i = 0; i < REGION_TABLE_SIZE; i++) {
+        if (region_table[i].page_signature == page_num) {
+            region_id = i;
+            break;
+        }
+        if (region_table[i].lru < min_lru) {
+            min_lru = region_table[i].lru;
+            lru_index = i;
+        }
+    }
+
+    if (region_id == -1) {
+        region_id = lru_index;
+        // Initialize the region entry
+        region_table[region_id].page_signature = page_num;
+        region_table[region_id].last_offset = 0;
+        region_table[region_id].prefetches_issued = 0;
+        region_table[region_id].prefetches_useful = 0;
+        region_table[region_id].lru = 0;
+        // Clear offsets
+        for (int i = 0; i < MAX_OFFSETS_PER_REGION; i++) {
+            region_table[region_id].offsets[i].offset = 0;
+            region_table[region_id].offsets[i].frequency = 0;
+        }
+    }
+
+    access_counter++;
+    if (access_counter == UINT32_MAX) {
+        access_counter = 0;
+        for (int i = 0; i < REGION_TABLE_SIZE; i++) {
+            region_table[i].lru = 0;
+        }
+    }
+
+    region_table[region_id].lru = access_counter;
+
+    // Offset learning (frequency-based)
+    if (region_table[region_id].last_offset != 0) {
+        int64_t delta = (int64_t)page_offset - (int64_t)region_table[region_id].last_offset;
+        if (delta != 0) {
+            bool found = false;
+            int min_freq_id = 0;
+            int min_freq = region_table[region_id].offsets[0].frequency;
+
+            for (int i = 0; i < MAX_OFFSETS_PER_REGION; i++) {
+                if (region_table[region_id].offsets[i].offset == delta) {
+                    region_table[region_id].offsets[i].frequency++;
+                    found = true;
+                    break;
+                }
+                if (region_table[region_id].offsets[i].frequency < min_freq) {
+                    min_freq = region_table[region_id].offsets[i].frequency;
+                    min_freq_id = i;
+                }
+            }
+            if (!found) {
+                // Replace offset with lowest frequency
+                region_table[region_id].offsets[min_freq_id].offset = delta;
+                region_table[region_id].offsets[min_freq_id].frequency = 1;
+            }
+        }
+    }
+
+    region_table[region_id].last_offset = page_offset;
+
+    // Issue prefetches
+    if (!cache_hit || region_table[region_id].checkAccuracy() > 0.7) {
+        int degree = region_table[region_id].getPrefetchDegree();
+        if (degree > 0) {
+            // Sort offsets by frequency descending (bubble sort)
+            OffsetEntry sorted_offsets[MAX_OFFSETS_PER_REGION];
+            memcpy(sorted_offsets, region_table[region_id].offsets, sizeof(sorted_offsets));
+
+            for (int i = 0; i < MAX_OFFSETS_PER_REGION - 1; i++) {
+                for (int j = 0; j < MAX_OFFSETS_PER_REGION - 1 - i; j++) {
+                    if (sorted_offsets[j].frequency < sorted_offsets[j + 1].frequency) {
+                        OffsetEntry temp = sorted_offsets[j];
+                        sorted_offsets[j] = sorted_offsets[j + 1];
+                        sorted_offsets[j + 1] = temp;
+                    }
+                }
+            }
+
+            int issued = 0;
+            for (int i = 0; i < MAX_OFFSETS_PER_REGION && issued < degree; i++) {
+                const OffsetEntry& oe = sorted_offsets[i];
+                if (oe.frequency < MIN_CONFIDENCE)
+                    continue;
+
+                int64_t pf_offset = (int64_t)page_offset + oe.offset;
+                if (pf_offset < 0 || pf_offset >= (1 << (LOG2_PAGE_SIZE - LOG2_BLOCK_SIZE)))
+                    continue;
+
+                uint64_t pf_addr = (page_num << LOG2_PAGE_SIZE) | ((uint64_t)pf_offset << LOG2_BLOCK_SIZE);
+
+                // If MSHR is less than half full then can add to L2 
+                if (MSHR.occupancy < (MSHR.SIZE >> 1))
+                    prefetch_line(ip, addr, pf_addr, FILL_L2, 0);
+                else
+                    prefetch_line(ip, addr, pf_addr, FILL_LLC, 0);
+
+                region_table[region_id].prefetches_issued++;
+                total_prefetches_issued++;
+                issued++;
+            }
+        }
+    }
+
+    // Track useful prefetches
+    if (cache_hit && metadata_in != 0) {
+        for (int i = 0; i < REGION_TABLE_SIZE; i++) {
+            if (region_table[i].page_signature == page_num) {
+                region_table[i].prefetches_useful++;
+                total_prefetches_useful++;
+                break;
+            }
+        }
+    }
+
+    return metadata_in;
+}
+
+// Cache fill update (mark metadata for prefetched lines)
+uint32_t CACHE::l2c_prefetcher_cache_fill(uint64_t addr, uint32_t set, uint32_t match,
+                                          uint8_t prefetch, uint64_t evicted_addr, uint32_t metadata_in) {
+    return prefetch ? 1 : metadata_in;
+}
+
+// Final stats printout
+void CACHE::l2c_prefetcher_final_stats() {
+    cout << "CPU " << cpu << " L2C Region-based Offset Prefetcher Stats:\n";
+    cout << "  Total prefetches issued: " << total_prefetches_issued << endl;
+    cout << "  Total useful prefetches: " << total_prefetches_useful << endl;
+
+    if (total_prefetches_issued > 0) {
+        double acc = (double)total_prefetches_useful / total_prefetches_issued;
+        cout << "  Overall accuracy: " << (acc * 100.0) << "%\n";
+    }
+
+    struct RegionStat {
+        int index;
+        double accuracy;
+    } region_stats[REGION_TABLE_SIZE];
+
+    int count = 0;
+    for (int i = 0; i < REGION_TABLE_SIZE; i++) {
+        if (region_table[i].prefetches_issued > 0) {
+            region_stats[count].index = i;
+            region_stats[count].accuracy = region_table[i].checkAccuracy();
+            count++;
+        }
+    }
+
+    /// Sort regions by accuracy descending (bubble sort)
+    for (int i = 0; i < count - 1; i++) {
+        for (int j = 0; j < count - i - 1; j++) {
+            if (region_stats[j].accuracy < region_stats[j + 1].accuracy) {
+                RegionStat tmp = region_stats[j];
+                region_stats[j] = region_stats[j + 1];
+                region_stats[j + 1] = tmp;
+            }
+        }
+    }
+
+    if (count > 0) {
+        cout << "  Top 5 regions by accuracy:\n";
+        for (int i = 0; i < count && i < 5; i++) {
+            int idx = region_stats[i].index;
+            const RegionEntry& r = region_table[idx];
+            cout << "    Page #: 0x" << hex << r.page_signature << dec
+                 << " | Accuracy: " << (region_stats[i].accuracy * 100.0) << "%"
+                 << " | Issued: " << r.prefetches_issued
+                 << " | Useful: " << r.prefetches_useful << "\n";
+        }
+    }
 }
