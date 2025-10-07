@@ -71,4 +71,6 @@ There are some other useful metrics printed out at the end of simulation. <be>
 
 5. Speedup plot is inside Plots folder with name speedup_comparison.png
 
-6. Report created with file name PA2_Report_Task1.pdf
+6. Report created with file name PA2_Report_Task1.pdf.
+
+7. Report word document link is https://docs.google.com/document/d/1ZNq191BENL2XivH-ldjXcak9XHE1RQHVuHQw-04ubBo
