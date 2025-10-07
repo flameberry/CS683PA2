@@ -7,9 +7,9 @@ traces = ['trace1', 'trace2', 'trace3', 'trace4']
 # Speedup values
 baseline = [1.0, 1.0, 1.0, 1.0]
 ip_stride = [1.033, 1.035, 1.022, 1.037]
-#offset_32 = [1.137, 1.115, 1.239, 1.118]
-#offset_64 = [1.137, 1.115, 1.239, 1.118]
-offset_128 = [1.138, 1.115, 1.239, 1.118]
+#offset_32 = [1.138, 1.115, 1.238, 1.118]
+#offset_64 = [1.138, 1.115, 1.238, 1.118]
+offset_128 = [1.138, 1.115, 1.238, 1.118]
 
 # Set up the positions
 x = np.arange(len(traces))
