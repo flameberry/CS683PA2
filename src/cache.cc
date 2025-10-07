@@ -746,7 +746,7 @@ void CACHE::handle_writeback() {
 
 					} else if (cache_type == IS_L2C)
 						WQ.entry[index].pf_metadata = l2c_prefetcher_cache_fill(WQ.entry[index].address << LOG2_BLOCK_SIZE, set, way, 0,
-							block[set][way].address << LOG2_BLOCK_SIZE, WQ.entry[index].pf_metadata);
+							block[set][way].address << LOG2_BLOCK_SIZE, WQ.entry[index].pf_metadata,WRITEBACK);
 					if (cache_type == IS_LLC) {
 						cpu = writeback_cpu;
 						WQ.entry[index].pf_metadata = llc_prefetcher_cache_fill(WQ.entry[index].address << LOG2_BLOCK_SIZE, set, way, 0,

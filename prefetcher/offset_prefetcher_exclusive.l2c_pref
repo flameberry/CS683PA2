@@ -3,6 +3,7 @@
 #include <cstring>
 #include <iostream>
 #include <map>
+#include <ooo_cpu.h>
 
 #define REGION_TABLE_SIZE 128
 #define MAX_OFFSETS_PER_REGION 5
@@ -209,10 +210,13 @@ uint32_t CACHE::l2c_prefetcher_operate(uint64_t addr, uint64_t ip, uint8_t cache
 
 			uint64_t pf_addr = (page_num << LOG2_PAGE_SIZE) | ((uint64_t)pf_offset << LOG2_BLOCK_SIZE);
 
-			if (MSHR.occupancy < (MSHR.SIZE * 0.75))
+			if (MSHR.occupancy < (MSHR.SIZE * 0.75)){
+
 				prefetch_line(ip, addr, pf_addr, FILL_L2, 0);
-			else
+			}
+			else{
 				prefetch_line(ip, addr, pf_addr, FILL_LLC, 0);
+			}
 
 			uint64_t pf_block_addr = pf_addr >> LOG2_BLOCK_SIZE;
 			prefetch_delta_map[pf_block_addr] = make_pair(page_num, oe.offset);
@@ -239,10 +243,46 @@ uint32_t CACHE::l2c_prefetcher_operate(uint64_t addr, uint64_t ip, uint8_t cache
 }
 
 uint32_t CACHE::l2c_prefetcher_cache_fill(uint64_t addr, uint32_t set, uint32_t match,
-	uint8_t prefetch, uint64_t evicted_addr, uint32_t metadata_in) {
+	uint8_t prefetch, uint64_t evicted_addr, uint32_t metadata_in,uint8_t type) {
 	if (evicted_addr != 0) {
 		uint64_t evicted_block = evicted_addr >> LOG2_BLOCK_SIZE;
 		prefetch_delta_map.erase(evicted_block);
+	}
+
+	if (type == WRITEBACK){
+		uint64_t page_num = get_page_number(addr);
+		uint64_t page_offset = get_page_offset(addr);
+		uint64_t block_addr = addr >> LOG2_BLOCK_SIZE;
+
+		int region_id = -1;
+
+		for (int i = 0; i < REGION_TABLE_SIZE; i++) {
+			if (region_table[i].page_signature == page_num) {
+				region_id = i;
+				break;
+			}
+		}
+
+		if (region_id != -1 && region.last_offset != 0 && region.accesses > 1) {
+		int64_t delta = (int64_t)page_offset - (int64_t)region.last_offset;
+
+			if (delta != 0) {
+				bool found = false;
+				int replace_id = 0;
+				int min_freq = INT_MAX;
+
+				for (int i = 0; i < MAX_OFFSETS_PER_REGION; i++) {
+					if (region.offsets[i].offset == delta) {
+						region.offsets[i].frequency--; // Negative feedback for WRITEBACK
+						found = true;
+						break;
+					}
+				}
+			}
+		}
+		if(found){
+			region.last_offset = page_offset;
+		}
 	}
 	return metadata_in;
 }
