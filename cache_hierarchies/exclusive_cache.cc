@@ -92,25 +92,20 @@ void CACHE::handle_fill() {
 				do_bypass = true;
 			}
 
-			if (cache_type == IS_L2C && do_bypass) {
-				invalidate_entry(MSHR.entry[mshr_index].address);
-				uncore.LLC.invalidate_entry(MSHR.entry[mshr_index].address);
-			}
-
 			// (Aditya): Invalidating a block from the lower levels in case there was a hit in any of them
-			if (do_bypass && (cache_type == IS_L1D || cache_type == IS_L2C)) {
-				if (uncore.LLC.check_hit(&MSHR.entry[mshr_index])) {
-					uncore.LLC.invalidate_entry(MSHR.entry[mshr_index].address);
-					// cout << "[LLC]: Invalidating block: " << std::hex << MSHR.entry[mshr_index].address << endl;
-				}
-
-				if (cache_type == IS_L1D) {
-					if (ooo_cpu[MSHR.entry[mshr_index].cpu].L2C.check_hit(&MSHR.entry[mshr_index])) {
-						ooo_cpu[MSHR.entry[mshr_index].cpu].L2C.invalidate_entry(MSHR.entry[mshr_index].address);
-						// cout << "[L2C]: Invalidating block: " << std::hex << MSHR.entry[mshr_index].address << endl;
-					}
-				}
-			}
+			// if (cache_type == IS_L1D || cache_type == IS_L2C) {
+			// 	if (uncore.LLC.check_hit(&MSHR.entry[mshr_index])) {
+			// 		uncore.LLC.invalidate_entry(MSHR.entry[mshr_index].address);
+			// 		// cout << "[LLC]: Invalidating block: " << std::hex << MSHR.entry[mshr_index].address << endl;
+			// 	}
+			//
+			// 	if (cache_type == IS_L1D) {
+			// 		if (ooo_cpu[MSHR.entry[mshr_index].cpu].L2C.check_hit(&MSHR.entry[mshr_index])) {
+			// 			ooo_cpu[MSHR.entry[mshr_index].cpu].L2C.invalidate_entry(MSHR.entry[mshr_index].address);
+			// 			// cout << "[L2C]: Invalidating block: " << std::hex << MSHR.entry[mshr_index].address << endl;
+			// 		}
+			// 	}
+			// }
 		}
 		// (Aditya): -------------------
 
@@ -235,8 +230,7 @@ void CACHE::handle_fill() {
 		// if (block[set][way].dirty) {
 
 		// (Aditya): Every evicted block in exclusive hierarchy must be written back to the lower level cache
-		// todo: add L1I
-		if (cache_type == IS_L1D || cache_type == IS_L2C || block[set][way].dirty) {
+		if (cache_type == IS_L1I || cache_type == IS_L1D || cache_type == IS_L2C || block[set][way].dirty) {
 			// check if the lower level WQ has enough room to keep this writeback request
 			if (lower_level) {
 				if (lower_level->get_occupancy(2, block[set][way].address) == lower_level->get_size(2, block[set][way].address)) {
@@ -358,72 +352,72 @@ void CACHE::handle_fill() {
 					if (MSHR.entry[mshr_index].type == RFO)
 						block[set][way].dirty = 1;
 				}
-			} // (Aditya): Moved this up
 
-			// Neelu: Adding condition to ensure that STLB does not insert instruction translations to Processed queue.
-			if (cache_type == IS_STLB && MSHR.entry[mshr_index].l1_pq_index != -1 && (MSHR.entry[mshr_index].send_both_tlb or !MSHR.entry[mshr_index].instruction)) //@Vishal: Prefetech request from L1D prefetcher
-			{
+				// Neelu: Adding condition to ensure that STLB does not insert instruction translations to Processed queue.
+				if (cache_type == IS_STLB && MSHR.entry[mshr_index].l1_pq_index != -1 && (MSHR.entry[mshr_index].send_both_tlb or !MSHR.entry[mshr_index].instruction)) //@Vishal: Prefetech request from L1D prefetcher
+				{
 
-				PACKET temp = MSHR.entry[mshr_index];
-				temp.data_pa = block[set][way].data;
-				assert(temp.l1_rq_index == -1 && temp.l1_wq_index == -1);
-				temp.read_translation_merged = 0; //@Vishal: Remove this before adding to PQ
-				temp.write_translation_merged = 0;
-				if (PROCESSED.occupancy < PROCESSED.SIZE)
-					PROCESSED.add_queue(&temp);
-				else
-					assert(0);
-			} else if (cache_type == IS_STLB && MSHR.entry[mshr_index].prefetch_translation_merged) //@Vishal: Prefetech request from L1D prefetcher
-			{
-				PACKET temp = MSHR.entry[mshr_index];
-				temp.data_pa = block[set][way].data;
-				temp.read_translation_merged = 0; //@Vishal: Remove this before adding to PQ
-				temp.write_translation_merged = 0;
-				if (PROCESSED.occupancy < PROCESSED.SIZE)
-					PROCESSED.add_queue(&temp);
-				else
-					assert(0);
-			}
+					PACKET temp = MSHR.entry[mshr_index];
+					temp.data_pa = block[set][way].data;
+					assert(temp.l1_rq_index == -1 && temp.l1_wq_index == -1);
+					temp.read_translation_merged = 0; //@Vishal: Remove this before adding to PQ
+					temp.write_translation_merged = 0;
+					if (PROCESSED.occupancy < PROCESSED.SIZE)
+						PROCESSED.add_queue(&temp);
+					else
+						assert(0);
+				} else if (cache_type == IS_STLB && MSHR.entry[mshr_index].prefetch_translation_merged) //@Vishal: Prefetech request from L1D prefetcher
+				{
+					PACKET temp = MSHR.entry[mshr_index];
+					temp.data_pa = block[set][way].data;
+					temp.read_translation_merged = 0; //@Vishal: Remove this before adding to PQ
+					temp.write_translation_merged = 0;
+					if (PROCESSED.occupancy < PROCESSED.SIZE)
+						PROCESSED.add_queue(&temp);
+					else
+						assert(0);
+				}
 
-			// Neelu: Invoking the L2C prefetcher on STLB fills
+				// Neelu: Invoking the L2C prefetcher on STLB fills
 
 #ifdef STLB_HINT_TO_L2_PREF
-			if (cache_type == IS_STLB) {
-				if ((MSHR.entry[mshr_index].instruction == 0) && (MSHR.entry[mshr_index].l1_rq_index != -1)) {
-					stlb_hints_to_l2++;
-					uint64_t phy_addr = ((block[set][way].data << LOG2_PAGE_SIZE) | (ooo_cpu[fill_cpu].L1D.RQ.entry[MSHR.entry[mshr_index].l1_rq_index].full_addr & ((1 << LOG2_PAGE_SIZE) - 1))) >> LOG2_BLOCK_SIZE;
-					// Neelu: Sending type as 6 so that L2C prefetcher can differentiate the STLB hints.
-					DP(if (warmup_complete[fill_cpu]) {
+				if (cache_type == IS_STLB) {
+					if ((MSHR.entry[mshr_index].instruction == 0) && (MSHR.entry[mshr_index].l1_rq_index != -1)) {
+						stlb_hints_to_l2++;
+						uint64_t phy_addr = ((block[set][way].data << LOG2_PAGE_SIZE) | (ooo_cpu[fill_cpu].L1D.RQ.entry[MSHR.entry[mshr_index].l1_rq_index].full_addr & ((1 << LOG2_PAGE_SIZE) - 1))) >> LOG2_BLOCK_SIZE;
+						// Neelu: Sending type as 6 so that L2C prefetcher can differentiate the STLB hints.
+						DP(if (warmup_complete[fill_cpu]) {
                             cout << "[" << NAME << "] " << __func__ << "sending stlb hint to L2: "; 
                             cout << " phy_addr: " << hex << phy_addr;
                             cout << " ip: " << MSHR.entry[mshr_index].ip << endl; });
 
-					uint32_t temp_metadata = ooo_cpu[fill_cpu].L2C.l2c_prefetcher_operate(phy_addr << LOG2_BLOCK_SIZE, MSHR.entry[mshr_index].ip, 0, 6, 0);
-					float l2c_mpki; // = (ooo_cpu[fill_cpu].L2C.sim_access[fill_cpu][0]*1000)/(ooo_cpu[fill_cpu].num_retired);
-					if (warmup_complete[fill_cpu])
-						if (ooo_cpu[fill_cpu].num_retired - ooo_cpu[fill_cpu].warmup_instructions > 0)
-							l2c_mpki = (ooo_cpu[fill_cpu].L2C.sim_miss[fill_cpu][0] * 1000) / (ooo_cpu[fill_cpu].num_retired - ooo_cpu[fill_cpu].warmup_instructions);
-						else if (ooo_cpu[fill_cpu].num_retired > 0)
-							l2c_mpki = (ooo_cpu[fill_cpu].L2C.sim_miss[fill_cpu][0] * 1000) / (ooo_cpu[fill_cpu].num_retired);
-					/*			if((((temp_metadata >> 17) & 1) | ((temp_metadata >> 18) & 1)) == 1)
-								getting_hint_from_l2++;*/
-					uncore.LLC.llc_prefetcher_operate(phy_addr << LOG2_BLOCK_SIZE, MSHR.entry[mshr_index].ip, 0, 6, temp_metadata);
+						uint32_t temp_metadata = ooo_cpu[fill_cpu].L2C.l2c_prefetcher_operate(phy_addr << LOG2_BLOCK_SIZE, MSHR.entry[mshr_index].ip, 0, 6, 0);
+						float l2c_mpki; // = (ooo_cpu[fill_cpu].L2C.sim_access[fill_cpu][0]*1000)/(ooo_cpu[fill_cpu].num_retired);
+						if (warmup_complete[fill_cpu])
+							if (ooo_cpu[fill_cpu].num_retired - ooo_cpu[fill_cpu].warmup_instructions > 0)
+								l2c_mpki = (ooo_cpu[fill_cpu].L2C.sim_miss[fill_cpu][0] * 1000) / (ooo_cpu[fill_cpu].num_retired - ooo_cpu[fill_cpu].warmup_instructions);
+							else if (ooo_cpu[fill_cpu].num_retired > 0)
+								l2c_mpki = (ooo_cpu[fill_cpu].L2C.sim_miss[fill_cpu][0] * 1000) / (ooo_cpu[fill_cpu].num_retired);
+						/*			if((((temp_metadata >> 17) & 1) | ((temp_metadata >> 18) & 1)) == 1)
+									getting_hint_from_l2++;*/
+						uncore.LLC.llc_prefetcher_operate(phy_addr << LOG2_BLOCK_SIZE, MSHR.entry[mshr_index].ip, 0, 6, temp_metadata);
+					}
 				}
-			}
 #endif
 
-			// Neelu: Pushing Prefetches from L2 to L1 after they fill in L2.
+				// Neelu: Pushing Prefetches from L2 to L1 after they fill in L2.
 #ifdef PUSH_PREFETCHES_FROM_L2_TO_L1
-			if ((cache_type == IS_L2C) && (MSHR.entry[mshr_index].type == PREFETCH) && (MSHR.entry[mshr_index].fill_level == FILL_L2)) {
-				// Neelu: Modifying the metadata to include a set bit (17th lsb bit) that will convey that this request is already translated.
-				// uint32_t updated_metadata = MSHR.entry[mshr_index].pf_metadata | (1 << 16);
-				// Neelu: Commenting this, because now, this bit will be set by the L2C prefetcher in the cache_fill function.
-				// Hence, argument passed will directly be MSHR packet's metadata instead of updated_metadata if the bit is set.
-				if (((MSHR.entry[mshr_index].pf_metadata >> 16) & 1) == 1)
-					ooo_cpu[fill_cpu].L1D.prefetch_line(MSHR.entry[mshr_index].ip, MSHR.entry[mshr_index].full_addr, MSHR.entry[mshr_index].full_addr, FILL_L1, MSHR.entry[mshr_index].pf_metadata);
-			}
+				if ((cache_type == IS_L2C) && (MSHR.entry[mshr_index].type == PREFETCH) && (MSHR.entry[mshr_index].fill_level == FILL_L2)) {
+					// Neelu: Modifying the metadata to include a set bit (17th lsb bit) that will convey that this request is already translated.
+					// uint32_t updated_metadata = MSHR.entry[mshr_index].pf_metadata | (1 << 16);
+					// Neelu: Commenting this, because now, this bit will be set by the L2C prefetcher in the cache_fill function.
+					// Hence, argument passed will directly be MSHR packet's metadata instead of updated_metadata if the bit is set.
+					if (((MSHR.entry[mshr_index].pf_metadata >> 16) & 1) == 1)
+						ooo_cpu[fill_cpu].L1D.prefetch_line(MSHR.entry[mshr_index].ip, MSHR.entry[mshr_index].full_addr, MSHR.entry[mshr_index].full_addr, FILL_L1, MSHR.entry[mshr_index].pf_metadata);
+				}
 
 #endif
+			} // (Aditya)
 
 			// check fill level
 			if (MSHR.entry[mshr_index].fill_level < fill_level) {
@@ -708,10 +702,6 @@ void CACHE::handle_writeback() {
 							writeback_packet.event_cycle = current_core_cycle[writeback_cpu];
 
 							lower_level->add_wq(&writeback_packet);
-
-							// (Aditya): Will this cause no writeback hits?
-							// invalidate_entry(writeback_packet.address);
-							// (Aditya): ----------------------------------
 						}
 					}
 #ifdef SANITY_CHECK
@@ -771,16 +761,16 @@ void CACHE::handle_writeback() {
 					sim_miss[writeback_cpu][WQ.entry[index].type]++;
 					sim_access[writeback_cpu][WQ.entry[index].type]++;
 
-					// (Aditya): Exclusive
-					if (cache_type != IS_L1D) {
+					// (Aditya): Remove the address in any other cache, before putting it into this cache.
+					if (cache_type != IS_L1I)
+						ooo_cpu[WQ.entry[index].cpu].L1I.invalidate_entry(WQ.entry[index].address);
+					if (cache_type != IS_L1D)
 						ooo_cpu[WQ.entry[index].cpu].L1D.invalidate_entry(WQ.entry[index].address);
-					}
-					if (cache_type != IS_L2C) {
+					if (cache_type != IS_L2C)
 						ooo_cpu[WQ.entry[index].cpu].L2C.invalidate_entry(WQ.entry[index].address);
-					}
-					if (cache_type != IS_LLC) {
+					if (cache_type != IS_LLC)
 						uncore.LLC.invalidate_entry(WQ.entry[index].address);
-					}
+					// (Aditya): ------------------------------------------------------------------------
 
 					fill_cache(set, way, &WQ.entry[index]);
 
