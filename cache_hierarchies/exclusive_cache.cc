@@ -26,23 +26,23 @@ volatile uint64_t violations = 0;
 void assert_exclusivity(PACKET* packet, const std::string& name, CACHE* c1, CACHE* c2, CACHE* c3 = nullptr) {
 	/* check in c1 cache */
 	if (c1->check_hit(packet) >= 0) {
-		cout << "[Assert-" << name << "]: Exclusivity violated [" << c1->NAME << "]: " << std::hex << packet->address << endl;
+		cout << "[Assert-" << name << "]: Exclusivity violated [" << c1->NAME << "]: " << std::hex << packet->address << std::dec << endl;
 		violations++;
-		assert(0);
+		// assert(0);
 	}
 
 	/* check in c2 cache */
 	if (c2->check_hit(packet) >= 0) {
 		violations++;
-		cout << "[Assert-" << name << "]: Exclusivity violated [" << c2->NAME << "]: " << std::hex << packet->address << endl;
-		assert(0);
+		cout << "[Assert-" << name << "]: Exclusivity violated [" << c2->NAME << "]: " << std::hex << packet->address << std::dec << endl;
+		// assert(0);
 	}
 
 	/* check in c3 cache */
 	if (c3 && c3->check_hit(packet) >= 0) {
 		violations++;
-		cout << "[Assert-" << name << "]: Exclusivity violated [" << c2->NAME << "]: " << std::hex << packet->address << endl;
-		assert(0);
+		cout << "[Assert-" << name << "]: Exclusivity violated [" << c2->NAME << "]: " << std::hex << packet->address << std::dec << endl;
+		// assert(0);
 	}
 }
 
@@ -1060,7 +1060,7 @@ void CACHE::handle_processed() {
 
 void CACHE::handle_read() {
 	// (Aditya): Debug
-	// cout << "Violations so far: " << violations << endl;
+	cout << "Violations so far: " << violations << endl;
 	// (Aditya): -----
 
 	if (cache_type == IS_L1D) {

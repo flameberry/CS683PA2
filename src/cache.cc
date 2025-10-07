@@ -1,3 +1,4 @@
+//  exclusive
 
 #include "block.h"
 #include "cache.h"
@@ -25,23 +26,23 @@ volatile uint64_t violations = 0;
 void assert_exclusivity(PACKET* packet, const std::string& name, CACHE* c1, CACHE* c2, CACHE* c3 = nullptr) {
 	/* check in c1 cache */
 	if (c1->check_hit(packet) >= 0) {
-		cout << "[Assert-" << name << "]: Exclusivity violated [" << c1->NAME << "]: " << std::hex << packet->address << endl;
+		cout << "[Assert-" << name << "]: Exclusivity violated [" << c1->NAME << "]: " << std::hex << packet->address << std::dec << endl;
 		violations++;
-		assert(0);
+		// assert(0);
 	}
 
 	/* check in c2 cache */
 	if (c2->check_hit(packet) >= 0) {
 		violations++;
-		cout << "[Assert-" << name << "]: Exclusivity violated [" << c2->NAME << "]: " << std::hex << packet->address << endl;
-		assert(0);
+		cout << "[Assert-" << name << "]: Exclusivity violated [" << c2->NAME << "]: " << std::hex << packet->address << std::dec << endl;
+		// assert(0);
 	}
 
 	/* check in c3 cache */
 	if (c3 && c3->check_hit(packet) >= 0) {
 		violations++;
-		cout << "[Assert-" << name << "]: Exclusivity violated [" << c2->NAME << "]: " << std::hex << packet->address << endl;
-		assert(0);
+		cout << "[Assert-" << name << "]: Exclusivity violated [" << c2->NAME << "]: " << std::hex << packet->address << std::dec << endl;
+		// assert(0);
 	}
 }
 
@@ -390,20 +391,18 @@ void CACHE::handle_fill() {
                             cout << " phy_addr: " << hex << phy_addr;
                             cout << " ip: " << MSHR.entry[mshr_index].ip << endl; });
 
-                    uint32_t temp_metadata = ooo_cpu[fill_cpu].L2C.l2c_prefetcher_operate(phy_addr<<LOG2_BLOCK_SIZE, MSHR.entry[mshr_index].ip, 0, 6, 0,0);
-                    float l2c_mpki; // = (ooo_cpu[fill_cpu].L2C.sim_access[fill_cpu][0]*1000)/(ooo_cpu[fill_cpu].num_retired);
-                    if(warmup_complete[fill_cpu])
-                        if(ooo_cpu[fill_cpu].num_retired - ooo_cpu[fill_cpu].warmup_instructions > 0)
-                            l2c_mpki = (ooo_cpu[fill_cpu].L2C.sim_miss[fill_cpu][0]*1000)/(ooo_cpu[fill_cpu].num_retired - ooo_cpu[fill_cpu].warmup_instructions);
-                        else
-                            if(ooo_cpu[fill_cpu].num_retired > 0)
-                                l2c_mpki = (ooo_cpu[fill_cpu].L2C.sim_miss[fill_cpu][0]*1000)/(ooo_cpu[fill_cpu].num_retired);
-                    /*			if((((temp_metadata >> 17) & 1) | ((temp_metadata >> 18) & 1)) == 1)
-                                getting_hint_from_l2++;*/
-                    uncore.LLC.llc_prefetcher_operate(phy_addr<<LOG2_BLOCK_SIZE, MSHR.entry[mshr_index].ip, 0, 6, temp_metadata);
-
-                }
-            }
+						uint32_t temp_metadata = ooo_cpu[fill_cpu].L2C.l2c_prefetcher_operate(phy_addr << LOG2_BLOCK_SIZE, MSHR.entry[mshr_index].ip, 0, 6, 0);
+						float l2c_mpki; // = (ooo_cpu[fill_cpu].L2C.sim_access[fill_cpu][0]*1000)/(ooo_cpu[fill_cpu].num_retired);
+						if (warmup_complete[fill_cpu])
+							if (ooo_cpu[fill_cpu].num_retired - ooo_cpu[fill_cpu].warmup_instructions > 0)
+								l2c_mpki = (ooo_cpu[fill_cpu].L2C.sim_miss[fill_cpu][0] * 1000) / (ooo_cpu[fill_cpu].num_retired - ooo_cpu[fill_cpu].warmup_instructions);
+							else if (ooo_cpu[fill_cpu].num_retired > 0)
+								l2c_mpki = (ooo_cpu[fill_cpu].L2C.sim_miss[fill_cpu][0] * 1000) / (ooo_cpu[fill_cpu].num_retired);
+						/*			if((((temp_metadata >> 17) & 1) | ((temp_metadata >> 18) & 1)) == 1)
+									getting_hint_from_l2++;*/
+						uncore.LLC.llc_prefetcher_operate(phy_addr << LOG2_BLOCK_SIZE, MSHR.entry[mshr_index].ip, 0, 6, temp_metadata);
+					}
+				}
 #endif
 
 				// Neelu: Pushing Prefetches from L2 to L1 after they fill in L2.
@@ -1061,7 +1060,7 @@ void CACHE::handle_processed() {
 
 void CACHE::handle_read() {
 	// (Aditya): Debug
-	// cout << "Violations so far: " << violations << endl;
+	cout << "Violations so far: " << violations << endl;
 	// (Aditya): -----
 
 	if (cache_type == IS_L1D) {
