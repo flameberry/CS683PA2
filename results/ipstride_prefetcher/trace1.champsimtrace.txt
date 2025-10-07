@@ -19,12 +19,12 @@ CPU 0 L2C IP-based stride prefetcher
 L2C has LRU replacement policy
 LLC has LRU replacement policy
 Heartbeat CPU 0 instructions: 10000000 cycles: 2547360 heartbeat IPC: 3.92563 cumulative IPC: 3.92563 (Simulation time: 0 hr 0 min 14 sec) 
-Heartbeat CPU 0 instructions: 20000005 cycles: 5089972 heartbeat IPC: 3.93297 cumulative IPC: 3.9293 (Simulation time: 0 hr 0 min 27 sec) 
+Heartbeat CPU 0 instructions: 20000005 cycles: 5089972 heartbeat IPC: 3.93297 cumulative IPC: 3.9293 (Simulation time: 0 hr 0 min 28 sec) 
 
-Warmup complete CPU 0 instructions: 25000007 cycles: 6357656 (Simulation time: 0 hr 0 min 33 sec) 
+Warmup complete CPU 0 instructions: 25000007 cycles: 6357656 (Simulation time: 0 hr 0 min 35 sec) 
 
-Heartbeat CPU 0 instructions: 30000007 cycles: 15768695 heartbeat IPC: 0.936442 cumulative IPC: 0.531291 (Simulation time: 0 hr 1 min 3 sec) 
-Heartbeat CPU 0 instructions: 40000002 cycles: 34206078 heartbeat IPC: 0.542376 cumulative IPC: 0.53863 (Simulation time: 0 hr 2 min 0 sec) 
+Heartbeat CPU 0 instructions: 30000007 cycles: 15768695 heartbeat IPC: 0.936442 cumulative IPC: 0.531291 (Simulation time: 0 hr 1 min 4 sec) 
+Heartbeat CPU 0 instructions: 40000002 cycles: 34206078 heartbeat IPC: 0.542376 cumulative IPC: 0.53863 (Simulation time: 0 hr 2 min 1 sec) 
 Heartbeat CPU 0 instructions: 50000000 cycles: 52104960 heartbeat IPC: 0.558694 cumulative IPC: 0.54648 (Simulation time: 0 hr 2 min 56 sec) 
 Finished CPU 0 instructions: 25000000 cycles: 45747305 cumulative IPC: 0.54648 (Simulation time: 0 hr 2 min 56 sec) 
 
