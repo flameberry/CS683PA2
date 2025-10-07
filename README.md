@@ -56,3 +56,19 @@ There are some other useful metrics printed out at the end of simulation. <be>
 
 1. sudo update-alternatives --config g++
 2. sudo update-alternatives --config gcc
+
+
+
+## Task-1 Related Updates
+
+1. For Offset based L2 Prefetcher, 3 exectable with name "champsim-offset_prefetcher_32 ", "champsim-offset_prefetcher_64" and "champsim-offset_prefetcher_128 " are created for region table sizes: 32, 64, 128 entries.
+
+2. To generate log files run ./exec_Champsim.sh it will overwrite existing logfile in results folder.
+
+3. To generate log file for offset based L2 prefetcher only run ./exec_Champsim_only_offset_prefetcher.sh it will overwrite existing logfile in results/offset_prefetcher folder.
+
+4. Log files already generated in results folder
+
+5. Speedup plot is inside Plots folder with name speedup_comparison.png
+
+6. Report created with file name PA2_Report_Task1.pdf
