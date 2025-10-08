@@ -1,21 +1,254 @@
 #include "cache.h"
+#include <cstring>
+#include <algorithm>
+#include <iostream>
+#include <map>
 
-void CACHE::l2c_prefetcher_initialize() 
-{
+#define REGION_TABLE_SIZE 128
+#define MAX_OFFSETS_PER_REGION 5
 
+using namespace std;
+
+struct OffsetEntry {
+    int offset;
+    int frequency;
+    int prefetches_issued;
+    int prefetches_useful;
+
+    OffsetEntry() : offset(0), frequency(0), prefetches_issued(0),prefetches_useful(0) {}
+    double getAccuracy() const {
+        if (prefetches_issued == 0) return 0.0;
+        return (double)prefetches_useful / prefetches_issued;
+    }
+};
+
+struct RegionEntry {
+    uint64_t page_signature;
+    uint64_t last_offset;
+    OffsetEntry offsets[MAX_OFFSETS_PER_REGION];
+    uint32_t accesses;
+    uint32_t prefetches_issued;
+    uint32_t prefetches_useful;
+    uint32_t lru;
+
+    RegionEntry() : page_signature(0), last_offset(0), accesses(0), lru(0) {
+        for (int i = 0; i < MAX_OFFSETS_PER_REGION; i++) {
+            offsets[i] = OffsetEntry();
+        }
+    }
+    double getAccuracy() const {
+        if (prefetches_issued == 0) return 0.0;
+        return (double)prefetches_useful / prefetches_issued;
+    }
+};
+
+// Global state
+static RegionEntry region_table[REGION_TABLE_SIZE];
+static uint32_t access_counter = 0;
+static uint64_t total_prefetches_issued = 0;
+static uint64_t total_prefetches_useful = 0;
+
+static map<uint64_t, pair<uint64_t, int>> prefetch_delta_map;
+
+uint64_t get_page_number(uint64_t addr) {
+    return addr >> LOG2_PAGE_SIZE;
 }
 
-uint32_t CACHE::l2c_prefetcher_operate(uint64_t addr, uint64_t ip, uint8_t cache_hit, uint8_t type, uint32_t metadata_in, uint8_t critical_ip_flag,uint64_t isPrefetchedblock)
-{
-  return metadata_in;
+uint64_t get_page_offset(uint64_t addr) {
+    return (addr >> LOG2_BLOCK_SIZE) & ((1LL << (LOG2_PAGE_SIZE - LOG2_BLOCK_SIZE)) - 1);
 }
 
-uint32_t CACHE::l2c_prefetcher_cache_fill(uint64_t addr, uint32_t set, uint32_t way, uint8_t prefetch, uint64_t evicted_addr, uint32_t metadata_in)
-{
-  return metadata_in;
+void CACHE::l2c_prefetcher_initialize() {
+    cout << "CPU " << cpu << " Region based L2 offset prefetcher" << endl;
+
+    access_counter = 0;
+    total_prefetches_issued = 0;
+    total_prefetches_useful = 0;
+    
+    for (int i = 0; i < REGION_TABLE_SIZE; i++) {
+        region_table[i] = RegionEntry();
+    }
 }
 
-void CACHE::l2c_prefetcher_final_stats()
-{
+uint32_t CACHE::l2c_prefetcher_operate(uint64_t addr, uint64_t ip, uint8_t cache_hit,
+                                       uint8_t type, uint32_t metadata_in, uint8_t critical_ip_flag, uint64_t isPrefetchedblock) {
+    if (type != LOAD) return metadata_in;
 
+    uint64_t page_num = get_page_number(addr);
+    uint64_t page_offset = get_page_offset(addr);
+    uint64_t block_addr = addr >> LOG2_BLOCK_SIZE;
+
+
+    // Handle usefulness attribution before learning (use current last_offset)
+    if (cache_hit && isPrefetchedblock) {
+
+         total_prefetches_useful++;
+
+        auto it = prefetch_delta_map.find(block_addr);
+        if (it != prefetch_delta_map.end()) {
+            uint64_t pf_page = it->second.first;
+            int pf_delta = it->second.second;
+
+       
+        for (int i = 0; i < REGION_TABLE_SIZE; i++) {
+            if (region_table[i].page_signature == pf_page) {
+                RegionEntry& region = region_table[i];
+                    region.prefetches_useful++;
+            
+                for (int j = 0; j < MAX_OFFSETS_PER_REGION; j++) {
+                    if (region.offsets[j].offset == pf_delta) {
+                        region.offsets[j].prefetches_useful++;
+                        break;
+                    }
+                }
+                break;
+            }
+        }
+        
+        // Remove from map after using 
+        prefetch_delta_map.erase(it);
+        }
+    }
+
+    // Find or create region entry
+    int region_id = -1;
+    uint32_t min_lru = UINT32_MAX;
+    int lru_index = 0;
+
+    for (int i = 0; i < REGION_TABLE_SIZE; i++) {
+        if (region_table[i].page_signature == page_num) {
+            region_id = i;
+            break;
+        }
+        if (region_table[i].lru < min_lru) {
+            min_lru = region_table[i].lru;
+            lru_index = i;
+        }
+    }
+
+    if (region_id == -1) {
+        region_id = lru_index;
+        region_table[region_id] = RegionEntry();
+        region_table[region_id].page_signature = page_num;
+    }
+
+    RegionEntry& region = region_table[region_id];
+
+    // Update LRU and accesses
+    access_counter++;
+    if (access_counter == UINT32_MAX) {
+        access_counter = 0;
+        for (int i = 0; i < REGION_TABLE_SIZE; i++) {
+            region_table[i].lru = 0;
+        }
+    }
+    region.lru = access_counter;
+    region.accesses++;
+
+    // Learn offset pattern if possible
+    if (region.last_offset != 0 && region.accesses > 1) {
+        int64_t delta = (int64_t)page_offset - (int64_t)region.last_offset;
+        
+        if (delta != 0) {
+            bool found = false;
+            int replace_id = 0;
+            int min_freq = INT_MAX;
+
+            for (int i = 0; i < MAX_OFFSETS_PER_REGION; i++) {
+                if (region.offsets[i].offset == delta) {
+                    region.offsets[i].frequency++;
+                    found = true;
+                    break;
+                }
+                // Evict lowest freq
+                if (region.offsets[i].frequency < min_freq) {
+                    min_freq = region.offsets[i].frequency;
+                    replace_id = i;
+                }
+            }
+
+            if (!found) {
+                region.offsets[replace_id].offset = delta;
+                region.offsets[replace_id].frequency = 1;
+            }
+        }
+    }
+    region.last_offset = page_offset;
+
+    if (region.accesses < 2) return metadata_in;
+
+    // Sort offsets by (accuracy * frequency) descending, tie-break by frequency
+    OffsetEntry sorted_offsets[MAX_OFFSETS_PER_REGION];
+    memcpy(sorted_offsets, region.offsets, sizeof(sorted_offsets));
+
+    for (int i = 0; i < MAX_OFFSETS_PER_REGION - 1; i++) {
+        for (int j = 0; j < MAX_OFFSETS_PER_REGION - 1 - i; j++) {
+            double score_j = sorted_offsets[j].getAccuracy() * sorted_offsets[j].frequency;
+            double score_jp1 = sorted_offsets[j + 1].getAccuracy() * sorted_offsets[j + 1].frequency;
+            if (score_j < score_jp1 || 
+                (abs(score_j - score_jp1) < 1e-9 && sorted_offsets[j].frequency < sorted_offsets[j + 1].frequency)) {
+                OffsetEntry temp = sorted_offsets[j];
+                sorted_offsets[j] = sorted_offsets[j + 1];
+                sorted_offsets[j + 1] = temp;
+            }
+        }
+    }
+
+    for (int rank = 0; rank < MAX_OFFSETS_PER_REGION; rank++) {
+        const OffsetEntry& oe = sorted_offsets[rank];
+            if(oe.frequency < 3)
+            continue;
+        
+        // Degree for this oe: decreases with rank (top=full degree, lower=less)
+        int degree_for_oe = MAX_OFFSETS_PER_REGION - rank;
+        
+        for (int dist = 1; dist <= degree_for_oe; dist++) {
+            int64_t pf_offset = (int64_t)page_offset + (int64_t)dist * oe.offset;
+            if (pf_offset < 0 || pf_offset >= (1LL << (LOG2_PAGE_SIZE - LOG2_BLOCK_SIZE))) {
+                continue;
+            }
+
+            uint64_t pf_addr = (page_num << LOG2_PAGE_SIZE) | ((uint64_t)pf_offset << LOG2_BLOCK_SIZE);
+
+            
+            if (MSHR.occupancy < (MSHR.SIZE*0.75))
+            prefetch_line(ip, addr, pf_addr, FILL_L2, 0);
+            else
+            prefetch_line(ip, addr, pf_addr, FILL_LLC, 0);
+
+            uint64_t pf_block_addr = pf_addr >> LOG2_BLOCK_SIZE;
+            prefetch_delta_map[pf_block_addr] = make_pair(page_num, oe.offset);
+            
+            // Limit map size to prevent unbounded growth
+            if (prefetch_delta_map.size() > 4096) {
+                // Remove oldest entry (first in map)
+                prefetch_delta_map.erase(prefetch_delta_map.begin());
+            }
+            
+            // Increment issued for offset and region
+            for (int j = 0; j < MAX_OFFSETS_PER_REGION; j++) {
+                if (region.offsets[j].offset == oe.offset) {
+                    region.offsets[j].prefetches_issued++;
+                    break;
+                }
+            }
+            region.prefetches_issued++;
+            total_prefetches_issued++;
+        }
+    }
+
+    return metadata_in;
+}
+
+uint32_t CACHE::l2c_prefetcher_cache_fill(uint64_t addr, uint32_t set, uint32_t match,
+                                          uint8_t prefetch, uint64_t evicted_addr, uint32_t metadata_in) {
+    if (evicted_addr != 0) {
+        uint64_t evicted_block = evicted_addr >> LOG2_BLOCK_SIZE;
+        prefetch_delta_map.erase(evicted_block);
+    }
+    return metadata_in;
+}
+
+void CACHE::l2c_prefetcher_final_stats() {
+     cout << "CPU " << cpu << " Region based L2 offset prefetcher L2cache stats already above" << endl;
 }

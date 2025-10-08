@@ -73,6 +73,7 @@ void CACHE::l2c_prefetcher_initialize() {
 	}
 }
 
+// (Manish):  Added one argumnent at the end of function to check prefetched block (done in non inclusive also)
 uint32_t CACHE::l2c_prefetcher_operate(uint64_t addr, uint64_t ip, uint8_t cache_hit,
 	uint8_t type, uint32_t metadata_in, uint8_t critical_ip_flag, uint64_t isPrefetchedblock) {
 	if (type != LOAD) return metadata_in;
@@ -210,13 +211,22 @@ uint32_t CACHE::l2c_prefetcher_operate(uint64_t addr, uint64_t ip, uint8_t cache
 
 			uint64_t pf_addr = (page_num << LOG2_PAGE_SIZE) | ((uint64_t)pf_offset << LOG2_BLOCK_SIZE);
 
-			if (MSHR.occupancy < (MSHR.SIZE * 0.75)){
+			// (Manish):  Added this variable for exclusive cache to check 
+			// whether prefetch issued successfully or not and according increasing frequency of offsets
 
-				prefetch_line(ip, addr, pf_addr, FILL_L2, 0);
+			int nPrefetchissued = 0;
+
+			if (MSHR.occupancy < (MSHR.SIZE * 0.75)){
+				nPrefetchissued = prefetch_line(ip, addr, pf_addr, FILL_L2, 0);
 			}
 			else{
-				prefetch_line(ip, addr, pf_addr, FILL_LLC, 0);
+				nPrefetchissued = prefetch_line(ip, addr, pf_addr, FILL_LLC, 0);
 			}
+
+			if(nPrefetchissued == 0)
+				continue;
+
+			// (Manish): Ends
 
 			uint64_t pf_block_addr = pf_addr >> LOG2_BLOCK_SIZE;
 			prefetch_delta_map[pf_block_addr] = make_pair(page_num, oe.offset);
@@ -238,16 +248,19 @@ uint32_t CACHE::l2c_prefetcher_operate(uint64_t addr, uint64_t ip, uint8_t cache
 			total_prefetches_issued++;
 		}
 	}
-
++
 	return metadata_in;
 }
 
+// (Manish):  Added one argumnent at the end of just by dafault dummy type but put writeback to cater writebacks in case of exclusive cache prefetcher
 uint32_t CACHE::l2c_prefetcher_cache_fill(uint64_t addr, uint32_t set, uint32_t match,
 	uint8_t prefetch, uint64_t evicted_addr, uint32_t metadata_in,uint8_t type) {
 	if (evicted_addr != 0) {
 		uint64_t evicted_block = evicted_addr >> LOG2_BLOCK_SIZE;
 		prefetch_delta_map.erase(evicted_block);
 	}
+
+	// (Manish):  Changes for exclusive cache
 
 	if (type == WRITEBACK){
 		uint64_t page_num = get_page_number(addr);
@@ -284,6 +297,7 @@ uint32_t CACHE::l2c_prefetcher_cache_fill(uint64_t addr, uint32_t set, uint32_t 
 			region.last_offset = page_offset;
 		}
 	}
+	// (Manish): Ends
 	return metadata_in;
 }
 

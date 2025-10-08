@@ -307,6 +307,8 @@ class CACHE : public MEMORY {
     int  check_hit(PACKET *packet),
          invalidate_entry(uint64_t inval_addr),
          check_mshr(PACKET *packet),
+         // (Manish):  Added new function to check hit in writeback queue
+         check_writeBack(PACKET* packet),
          prefetch_line(uint64_t ip, uint64_t base_addr, uint64_t pf_addr, int prefetch_fill_level, uint32_t prefetch_metadata)/* Neelu: commenting, uint64_t prefetch_id)*/,
          kpc_prefetch_line(uint64_t base_addr, uint64_t pf_addr, int prefetch_fill_level, int delta, int depth, int signature, int confidence, uint32_t prefetch_metadata),
          prefetch_translation(uint64_t ip, uint64_t pf_addr, int pf_fill_level, uint32_t prefetch_metadata, uint64_t prefetch_id, uint8_t instruction),
@@ -400,9 +402,10 @@ class CACHE : public MEMORY {
     	void (*l1i_prefetcher_cache_operate)(uint32_t, uint64_t, uint8_t, uint8_t);
 	void (*l1i_prefetcher_cache_fill)(uint32_t, uint64_t, uint32_t, uint32_t, uint8_t, uint64_t);
 
-
+    // (Manish):  Added one argumnent at the end of function to check prefetched block
     uint32_t l2c_prefetcher_operate(uint64_t addr, uint64_t ip, uint8_t cache_hit, uint8_t type, uint32_t metadata_in, uint8_t critical_ip_flag,uint64_t isPrefetchedblock = 0),	// uint64_t prefetch_id),
          llc_prefetcher_operate(uint64_t addr, uint64_t ip, uint8_t cache_hit, uint8_t type, uint32_t metadata_in),
+         // (Manish):  Added one argumnent at the end of just by dafault dummy type but put writeback to cater writebacks in case of exclusive cache prefetcher
          l2c_prefetcher_cache_fill(uint64_t addr, uint32_t set, uint32_t way, uint8_t prefetch, uint64_t evicted_addr, uint32_t metadata_in,uint8_t type = 8),
          llc_prefetcher_cache_fill(uint64_t addr, uint32_t set, uint32_t way, uint8_t prefetch, uint64_t evicted_addr, uint32_t metadata_in);
     

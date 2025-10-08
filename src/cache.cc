@@ -1,52 +1,19 @@
-//  exclusive
 
-#include "block.h"
+// non-inclusive
+
 #include "cache.h"
-#include "instruction.h"
 #include "ooo_cpu.h"
 #include "set.h"
 #include "uncore.h"
+
+#include <vector>
+
+#include <iterator>
 
 uint64_t l2pf_access = 0;
 
 #define PREF_CLASS_MASK 0xF00 // 0x1E000	//Neelu: IPCP pref class
 #define NUM_OF_STRIDE_BITS 8  // 13	//Neelu: IPCP stride
-
-// (Aditya): asserts
-// (Aditya): Check whether the cache block is present in the lower levels of cache or not
-
-/*
- * For every read hit, assert the lack of existence in other cache levels
- * Use uncore.LLC for LLC access
- * ooo_cpu[fill_cpu].L2C for L2C access
- */
-
-volatile uint64_t violations = 0;
-
-void assert_exclusivity(PACKET* packet, const std::string& name, CACHE* c1, CACHE* c2, CACHE* c3 = nullptr) {
-	/* check in c1 cache */
-	if (c1->check_hit(packet) >= 0) {
-		cout << "[Assert-" << name << "]: Exclusivity violated [" << c1->NAME << "]: " << std::hex << packet->address << std::dec << endl;
-		violations++;
-		// assert(0);
-	}
-
-	/* check in c2 cache */
-	if (c2->check_hit(packet) >= 0) {
-		violations++;
-		cout << "[Assert-" << name << "]: Exclusivity violated [" << c2->NAME << "]: " << std::hex << packet->address << std::dec << endl;
-		// assert(0);
-	}
-
-	/* check in c3 cache */
-	if (c3 && c3->check_hit(packet) >= 0) {
-		violations++;
-		cout << "[Assert-" << name << "]: Exclusivity violated [" << c2->NAME << "]: " << std::hex << packet->address << std::dec << endl;
-		// assert(0);
-	}
-}
-
-// (Aditya): ----------------------------------------------------------------------------
 
 ostream& operator<<(ostream& os, const PACKET& packet) {
 	return os << " cpu: " << packet.cpu << " instr_id: " << packet.instr_id << " Translated: " << +packet.translated << " address: " << hex << packet.address << " full_addr: " << packet.full_addr << dec << " full_virtual_address: " << hex << packet.full_virtual_address << " full_physical_address: " << packet.full_physical_address << dec << "Type: " << +packet.type << " event_cycle: " << packet.event_cycle << " current_core_cycle: " << current_core_cycle[packet.cpu] << endl;
@@ -84,30 +51,6 @@ void CACHE::handle_fill() {
 		}
 
 		uint8_t do_fill = 1;
-
-		// (Aditya): Bypass block to L1D
-		bool do_bypass = false;
-		if (cache_type == IS_L1I || cache_type == IS_L1D || cache_type == IS_L2C || cache_type == IS_LLC) {
-			if (MSHR.entry[mshr_index].fill_level < fill_level) {
-				do_bypass = true;
-			}
-
-			// (Aditya): Invalidating a block from the lower levels in case there was a hit in any of them
-			// if (cache_type == IS_L1D || cache_type == IS_L2C) {
-			// 	if (uncore.LLC.check_hit(&MSHR.entry[mshr_index])) {
-			// 		uncore.LLC.invalidate_entry(MSHR.entry[mshr_index].address);
-			// 		// cout << "[LLC]: Invalidating block: " << std::hex << MSHR.entry[mshr_index].address << endl;
-			// 	}
-			//
-			// 	if (cache_type == IS_L1D) {
-			// 		if (ooo_cpu[MSHR.entry[mshr_index].cpu].L2C.check_hit(&MSHR.entry[mshr_index])) {
-			// 			ooo_cpu[MSHR.entry[mshr_index].cpu].L2C.invalidate_entry(MSHR.entry[mshr_index].address);
-			// 			// cout << "[L2C]: Invalidating block: " << std::hex << MSHR.entry[mshr_index].address << endl;
-			// 		}
-			// 	}
-			// }
-		}
-		// (Aditya): -------------------
 
 		// Prefetch translation requests should be dropped in case of page fault
 		if (cache_type == IS_ITLB || cache_type == IS_DTLB || cache_type == IS_STLB) {
@@ -227,10 +170,8 @@ void CACHE::handle_fill() {
 		}
 
 		// is this dirty?
-		// if (block[set][way].dirty) {
+		if (block[set][way].dirty) {
 
-		// (Aditya): Every evicted block in exclusive hierarchy must be written back to the lower level cache
-		if (cache_type == IS_L1I || cache_type == IS_L1D || cache_type == IS_L2C || block[set][way].dirty) {
 			// check if the lower level WQ has enough room to keep this writeback request
 			if (lower_level) {
 				if (lower_level->get_occupancy(2, block[set][way].address) == lower_level->get_size(2, block[set][way].address)) {
@@ -270,154 +211,151 @@ void CACHE::handle_fill() {
 		}
 
 		if (do_fill) {
-			if (!do_bypass) {
-				// (Aditya): Debug
-				// cout << "[" << this->NAME << "]: Evicting address: " << std::hex << block[set][way].address << " from set: " << std::dec << set << ", way: " << way << "; Filling in address: " << std::hex << MSHR.entry[MSHR.next_fill_index].address << std::dec << endl;
-				// (Aditya): -----
 
-				//@Vasudha: For PC-offset DTLB prefetcher, in case of eviction, transfer block from training table to trained table
-				if (cache_type == IS_DTLB && block[set][way].valid == 1) {
-					dtlb_prefetcher_cache_fill(MSHR.entry[mshr_index].full_addr, set, way, (MSHR.entry[mshr_index].type == PREFETCH) ? 1 : 0, block[set][way].address << LOG2_PAGE_SIZE,
-						MSHR.entry[mshr_index].pf_metadata);
+			//@Vasudha: For PC-offset DTLB prefetcher, in case of eviction, transfer block from training table to trained table
+			if (cache_type == IS_DTLB && block[set][way].valid == 1) {
+				dtlb_prefetcher_cache_fill(MSHR.entry[mshr_index].full_addr, set, way, (MSHR.entry[mshr_index].type == PREFETCH) ? 1 : 0, block[set][way].address << LOG2_PAGE_SIZE,
+					MSHR.entry[mshr_index].pf_metadata);
+			}
+			// update prefetcher
+			if (cache_type == IS_L1I)
+				l1i_prefetcher_cache_fill(fill_cpu, ((MSHR.entry[mshr_index].ip) >> LOG2_BLOCK_SIZE) << LOG2_BLOCK_SIZE, set, way, (MSHR.entry[mshr_index].type == PREFETCH) ? 1 : 0, ((block[set][way].ip) >> LOG2_BLOCK_SIZE) << LOG2_BLOCK_SIZE);
+			if (cache_type == IS_L1D) {
+				uint64_t v_fill_addr, v_evicted_addr;
+				map<uint64_t, uint64_t>::iterator ppage_check = inverse_table.find(MSHR.entry[mshr_index].full_addr >> LOG2_PAGE_SIZE);
+				if (ppage_check == inverse_table.end()) {
+					cout << MSHR.entry[mshr_index];
+					assert(0);
 				}
-				// update prefetcher
-				if (cache_type == IS_L1I)
-					l1i_prefetcher_cache_fill(fill_cpu, ((MSHR.entry[mshr_index].ip) >> LOG2_BLOCK_SIZE) << LOG2_BLOCK_SIZE, set, way, (MSHR.entry[mshr_index].type == PREFETCH) ? 1 : 0, ((block[set][way].ip) >> LOG2_BLOCK_SIZE) << LOG2_BLOCK_SIZE);
-				if (cache_type == IS_L1D) {
-					uint64_t v_fill_addr, v_evicted_addr;
-					map<uint64_t, uint64_t>::iterator ppage_check = inverse_table.find(MSHR.entry[mshr_index].full_addr >> LOG2_PAGE_SIZE);
-					if (ppage_check == inverse_table.end()) {
-						cout << MSHR.entry[mshr_index];
-						assert(0);
-					}
-					v_fill_addr = (ppage_check->second) << LOG2_PAGE_SIZE;
-					v_fill_addr |= (MSHR.entry[mshr_index].full_addr & ((1 << LOG2_PAGE_SIZE) - 1));
+				v_fill_addr = (ppage_check->second) << LOG2_PAGE_SIZE;
+				v_fill_addr |= (MSHR.entry[mshr_index].full_addr & ((1 << LOG2_PAGE_SIZE) - 1));
 
-					// Now getting virtual address for the evicted address
-					/*Neelu: Note that it is not always necessary that evicted address is a valid address and is present in the inverse table, hence (1) do not use the assert and (2) if it is not present, assign it to zero. */
+				// Now getting virtual address for the evicted address
+				/*Neelu: Note that it is not always necessary that evicted address is a valid address and is present in the inverse table, hence (1) do not use the assert and (2) if it is not present, assign it to zero. */
 
-					ppage_check = inverse_table.find(block[set][way].address >> (LOG2_PAGE_SIZE - LOG2_BLOCK_SIZE));
-					if (ppage_check != inverse_table.end()) {
-						v_evicted_addr = (ppage_check->second) << LOG2_PAGE_SIZE;
-						v_evicted_addr |= ((block[set][way].address << LOG2_BLOCK_SIZE) & ((1 << LOG2_PAGE_SIZE) - 1));
-					} else
-						v_evicted_addr = 0;
+				ppage_check = inverse_table.find(block[set][way].address >> (LOG2_PAGE_SIZE - LOG2_BLOCK_SIZE));
+				if (ppage_check != inverse_table.end()) {
+					v_evicted_addr = (ppage_check->second) << LOG2_PAGE_SIZE;
+					v_evicted_addr |= ((block[set][way].address << LOG2_BLOCK_SIZE) & ((1 << LOG2_PAGE_SIZE) - 1));
+				} else
+					v_evicted_addr = 0;
 
-					l1d_prefetcher_cache_fill(v_fill_addr, MSHR.entry[mshr_index].full_addr, set, way, (MSHR.entry[mshr_index].type == PREFETCH) ? 1 : 0, v_evicted_addr, block[set][way].address << LOG2_BLOCK_SIZE, MSHR.entry[mshr_index].pf_metadata);
-				}
-				if (cache_type == IS_L2C)
-					MSHR.entry[mshr_index].pf_metadata = l2c_prefetcher_cache_fill(MSHR.entry[mshr_index].address << LOG2_BLOCK_SIZE, set, way, (MSHR.entry[mshr_index].type == PREFETCH) ? 1 : 0,
-						block[set][way].address << LOG2_BLOCK_SIZE, MSHR.entry[mshr_index].pf_metadata);
-				if (cache_type == IS_LLC) {
-					cpu = fill_cpu;
-					MSHR.entry[mshr_index].pf_metadata = llc_prefetcher_cache_fill(MSHR.entry[mshr_index].address << LOG2_BLOCK_SIZE, set, way, (MSHR.entry[mshr_index].type == PREFETCH) ? 1 : 0,
-						block[set][way].address << LOG2_BLOCK_SIZE, MSHR.entry[mshr_index].pf_metadata);
-					cpu = 0;
-				}
+				l1d_prefetcher_cache_fill(v_fill_addr, MSHR.entry[mshr_index].full_addr, set, way, (MSHR.entry[mshr_index].type == PREFETCH) ? 1 : 0, v_evicted_addr, block[set][way].address << LOG2_BLOCK_SIZE, MSHR.entry[mshr_index].pf_metadata);
+			}
+			if (cache_type == IS_L2C)
+				MSHR.entry[mshr_index].pf_metadata = l2c_prefetcher_cache_fill(MSHR.entry[mshr_index].address << LOG2_BLOCK_SIZE, set, way, (MSHR.entry[mshr_index].type == PREFETCH) ? 1 : 0,
+					block[set][way].address << LOG2_BLOCK_SIZE, MSHR.entry[mshr_index].pf_metadata);
+			if (cache_type == IS_LLC) {
+				cpu = fill_cpu;
+				MSHR.entry[mshr_index].pf_metadata = llc_prefetcher_cache_fill(MSHR.entry[mshr_index].address << LOG2_BLOCK_SIZE, set, way, (MSHR.entry[mshr_index].type == PREFETCH) ? 1 : 0,
+					block[set][way].address << LOG2_BLOCK_SIZE, MSHR.entry[mshr_index].pf_metadata);
+				cpu = 0;
+			}
 
-				// update replacement policy
-				(this->*update_replacement_state)(fill_cpu, set, way, MSHR.entry[mshr_index].full_addr, MSHR.entry[mshr_index].ip, block[set][way].full_addr, MSHR.entry[mshr_index].type, 0);
+			// update replacement policy
+			(this->*update_replacement_state)(fill_cpu, set, way, MSHR.entry[mshr_index].full_addr, MSHR.entry[mshr_index].ip, block[set][way].full_addr, MSHR.entry[mshr_index].type, 0);
 
-				// COLLECT STATS
-				sim_miss[fill_cpu][MSHR.entry[mshr_index].type]++;
-				// Neelu: Capturing instruction stats for L2C
-				if ((cache_type == IS_L2C) && (MSHR.entry[mshr_index].instruction == 1))
-					sim_instr_miss[fill_cpu][MSHR.entry[mshr_index].type]++;
-				sim_access[fill_cpu][MSHR.entry[mshr_index].type]++;
+			// COLLECT STATS
+			sim_miss[fill_cpu][MSHR.entry[mshr_index].type]++;
+			// Neelu: Capturing instruction stats for L2C
+			if ((cache_type == IS_L2C) && (MSHR.entry[mshr_index].instruction == 1))
+				sim_instr_miss[fill_cpu][MSHR.entry[mshr_index].type]++;
+			sim_access[fill_cpu][MSHR.entry[mshr_index].type]++;
 
-				// Neelu: IPCP stats collection
-				if (cache_type == IS_L1D) {
-					if (MSHR.entry[mshr_index].late_pref == 1) {
-						int temp_pf_class = (MSHR.entry[mshr_index].pf_metadata & PREF_CLASS_MASK) >> NUM_OF_STRIDE_BITS;
-						if (temp_pf_class < 5) {
-							pref_late[cpu][((MSHR.entry[mshr_index].pf_metadata & PREF_CLASS_MASK) >> NUM_OF_STRIDE_BITS)]++;
-						}
+			// Neelu: IPCP stats collection
+			if (cache_type == IS_L1D) {
+				if (MSHR.entry[mshr_index].late_pref == 1) {
+					int temp_pf_class = (MSHR.entry[mshr_index].pf_metadata & PREF_CLASS_MASK) >> NUM_OF_STRIDE_BITS;
+					if (temp_pf_class < 5) {
+						pref_late[cpu][((MSHR.entry[mshr_index].pf_metadata & PREF_CLASS_MASK) >> NUM_OF_STRIDE_BITS)]++;
 					}
 				}
+			}
 
 #ifdef PUSH_DTLB_PB
-				if ((cache_type != IS_DTLB) || (cache_type == IS_DTLB && MSHR.entry[mshr_index].type != PREFETCH_TRANSLATION))
+			if ((cache_type != IS_DTLB) || (cache_type == IS_DTLB && MSHR.entry[mshr_index].type != PREFETCH_TRANSLATION))
 #endif
-					fill_cache(set, way, &MSHR.entry[mshr_index]);
+				fill_cache(set, way, &MSHR.entry[mshr_index]);
 #ifdef PUSH_DTLB_PB
-				else if (cache_type == IS_DTLB && MSHR.entry[mshr_index].type == PREFETCH_TRANSLATION) {
-					uint32_t victim_way;
-					victim_way = ooo_cpu[fill_cpu].DTLB_PB.find_victim(fill_cpu, MSHR.entry[mshr_index].instr_id, 0, ooo_cpu[fill_cpu].DTLB_PB.block[0], MSHR.entry[mshr_index].ip, MSHR.entry[mshr_index].full_addr, MSHR.entry[mshr_index].type);
-					ooo_cpu[fill_cpu].DTLB_PB.update_replacement_state(fill_cpu, 0, way, MSHR.entry[mshr_index].full_addr, MSHR.entry[mshr_index].ip, ooo_cpu[fill_cpu].DTLB_PB.block[0][victim_way].full_addr, MSHR.entry[mshr_index].type, 0);
-					ooo_cpu[fill_cpu].DTLB_PB.fill_cache(0, victim_way, &MSHR.entry[mshr_index]);
-				}
+			else if (cache_type == IS_DTLB && MSHR.entry[mshr_index].type == PREFETCH_TRANSLATION) {
+				uint32_t victim_way;
+				victim_way = ooo_cpu[fill_cpu].DTLB_PB.find_victim(fill_cpu, MSHR.entry[mshr_index].instr_id, 0, ooo_cpu[fill_cpu].DTLB_PB.block[0], MSHR.entry[mshr_index].ip, MSHR.entry[mshr_index].full_addr, MSHR.entry[mshr_index].type);
+				ooo_cpu[fill_cpu].DTLB_PB.update_replacement_state(fill_cpu, 0, way, MSHR.entry[mshr_index].full_addr, MSHR.entry[mshr_index].ip, ooo_cpu[fill_cpu].DTLB_PB.block[0][victim_way].full_addr, MSHR.entry[mshr_index].type, 0);
+				ooo_cpu[fill_cpu].DTLB_PB.fill_cache(0, victim_way, &MSHR.entry[mshr_index]);
+			}
 #endif
-				// RFO marks cache line dirty
-				if (cache_type == IS_L1D) {
-					if (MSHR.entry[mshr_index].type == RFO)
-						block[set][way].dirty = 1;
-				}
+			// RFO marks cache line dirty
+			if (cache_type == IS_L1D) {
+				if (MSHR.entry[mshr_index].type == RFO)
+					block[set][way].dirty = 1;
+			}
 
-				// Neelu: Adding condition to ensure that STLB does not insert instruction translations to Processed queue.
-				if (cache_type == IS_STLB && MSHR.entry[mshr_index].l1_pq_index != -1 && (MSHR.entry[mshr_index].send_both_tlb or !MSHR.entry[mshr_index].instruction)) //@Vishal: Prefetech request from L1D prefetcher
-				{
+			// Neelu: Adding condition to ensure that STLB does not insert instruction translations to Processed queue.
+			if (cache_type == IS_STLB && MSHR.entry[mshr_index].l1_pq_index != -1 && (MSHR.entry[mshr_index].send_both_tlb or !MSHR.entry[mshr_index].instruction)) //@Vishal: Prefetech request from L1D prefetcher
+			{
 
-					PACKET temp = MSHR.entry[mshr_index];
-					temp.data_pa = block[set][way].data;
-					assert(temp.l1_rq_index == -1 && temp.l1_wq_index == -1);
-					temp.read_translation_merged = 0; //@Vishal: Remove this before adding to PQ
-					temp.write_translation_merged = 0;
-					if (PROCESSED.occupancy < PROCESSED.SIZE)
-						PROCESSED.add_queue(&temp);
-					else
-						assert(0);
-				} else if (cache_type == IS_STLB && MSHR.entry[mshr_index].prefetch_translation_merged) //@Vishal: Prefetech request from L1D prefetcher
-				{
-					PACKET temp = MSHR.entry[mshr_index];
-					temp.data_pa = block[set][way].data;
-					temp.read_translation_merged = 0; //@Vishal: Remove this before adding to PQ
-					temp.write_translation_merged = 0;
-					if (PROCESSED.occupancy < PROCESSED.SIZE)
-						PROCESSED.add_queue(&temp);
-					else
-						assert(0);
-				}
+				PACKET temp = MSHR.entry[mshr_index];
+				temp.data_pa = block[set][way].data;
+				assert(temp.l1_rq_index == -1 && temp.l1_wq_index == -1);
+				temp.read_translation_merged = 0; //@Vishal: Remove this before adding to PQ
+				temp.write_translation_merged = 0;
+				if (PROCESSED.occupancy < PROCESSED.SIZE)
+					PROCESSED.add_queue(&temp);
+				else
+					assert(0);
+			} else if (cache_type == IS_STLB && MSHR.entry[mshr_index].prefetch_translation_merged) //@Vishal: Prefetech request from L1D prefetcher
+			{
+				PACKET temp = MSHR.entry[mshr_index];
+				temp.data_pa = block[set][way].data;
+				temp.read_translation_merged = 0; //@Vishal: Remove this before adding to PQ
+				temp.write_translation_merged = 0;
+				if (PROCESSED.occupancy < PROCESSED.SIZE)
+					PROCESSED.add_queue(&temp);
+				else
+					assert(0);
+			}
 
-				// Neelu: Invoking the L2C prefetcher on STLB fills
+			// Neelu: Invoking the L2C prefetcher on STLB fills
 
 #ifdef STLB_HINT_TO_L2_PREF
-				if (cache_type == IS_STLB) {
-					if ((MSHR.entry[mshr_index].instruction == 0) && (MSHR.entry[mshr_index].l1_rq_index != -1)) {
-						stlb_hints_to_l2++;
-						uint64_t phy_addr = ((block[set][way].data << LOG2_PAGE_SIZE) | (ooo_cpu[fill_cpu].L1D.RQ.entry[MSHR.entry[mshr_index].l1_rq_index].full_addr & ((1 << LOG2_PAGE_SIZE) - 1))) >> LOG2_BLOCK_SIZE;
-						// Neelu: Sending type as 6 so that L2C prefetcher can differentiate the STLB hints.
-						DP(if (warmup_complete[fill_cpu]) {
+			if (cache_type == IS_STLB) {
+				if ((MSHR.entry[mshr_index].instruction == 0) && (MSHR.entry[mshr_index].l1_rq_index != -1)) {
+					stlb_hints_to_l2++;
+					uint64_t phy_addr = ((block[set][way].data << LOG2_PAGE_SIZE) | (ooo_cpu[fill_cpu].L1D.RQ.entry[MSHR.entry[mshr_index].l1_rq_index].full_addr & ((1 << LOG2_PAGE_SIZE) - 1))) >> LOG2_BLOCK_SIZE;
+					// Neelu: Sending type as 6 so that L2C prefetcher can differentiate the STLB hints.
+					DP(if (warmup_complete[fill_cpu]) {
                             cout << "[" << NAME << "] " << __func__ << "sending stlb hint to L2: "; 
                             cout << " phy_addr: " << hex << phy_addr;
                             cout << " ip: " << MSHR.entry[mshr_index].ip << endl; });
 
-						uint32_t temp_metadata = ooo_cpu[fill_cpu].L2C.l2c_prefetcher_operate(phy_addr << LOG2_BLOCK_SIZE, MSHR.entry[mshr_index].ip, 0, 6, 0);
-						float l2c_mpki; // = (ooo_cpu[fill_cpu].L2C.sim_access[fill_cpu][0]*1000)/(ooo_cpu[fill_cpu].num_retired);
-						if (warmup_complete[fill_cpu])
-							if (ooo_cpu[fill_cpu].num_retired - ooo_cpu[fill_cpu].warmup_instructions > 0)
-								l2c_mpki = (ooo_cpu[fill_cpu].L2C.sim_miss[fill_cpu][0] * 1000) / (ooo_cpu[fill_cpu].num_retired - ooo_cpu[fill_cpu].warmup_instructions);
-							else if (ooo_cpu[fill_cpu].num_retired > 0)
-								l2c_mpki = (ooo_cpu[fill_cpu].L2C.sim_miss[fill_cpu][0] * 1000) / (ooo_cpu[fill_cpu].num_retired);
-						/*			if((((temp_metadata >> 17) & 1) | ((temp_metadata >> 18) & 1)) == 1)
-									getting_hint_from_l2++;*/
-						uncore.LLC.llc_prefetcher_operate(phy_addr << LOG2_BLOCK_SIZE, MSHR.entry[mshr_index].ip, 0, 6, temp_metadata);
-					}
-				}
+                    uint32_t temp_metadata = ooo_cpu[fill_cpu].L2C.l2c_prefetcher_operate(phy_addr<<LOG2_BLOCK_SIZE, MSHR.entry[mshr_index].ip, 0, 6, 0,0);
+                    float l2c_mpki; // = (ooo_cpu[fill_cpu].L2C.sim_access[fill_cpu][0]*1000)/(ooo_cpu[fill_cpu].num_retired);
+                    if(warmup_complete[fill_cpu])
+                        if(ooo_cpu[fill_cpu].num_retired - ooo_cpu[fill_cpu].warmup_instructions > 0)
+                            l2c_mpki = (ooo_cpu[fill_cpu].L2C.sim_miss[fill_cpu][0]*1000)/(ooo_cpu[fill_cpu].num_retired - ooo_cpu[fill_cpu].warmup_instructions);
+                        else
+                            if(ooo_cpu[fill_cpu].num_retired > 0)
+                                l2c_mpki = (ooo_cpu[fill_cpu].L2C.sim_miss[fill_cpu][0]*1000)/(ooo_cpu[fill_cpu].num_retired);
+                    /*			if((((temp_metadata >> 17) & 1) | ((temp_metadata >> 18) & 1)) == 1)
+                                getting_hint_from_l2++;*/
+                    uncore.LLC.llc_prefetcher_operate(phy_addr<<LOG2_BLOCK_SIZE, MSHR.entry[mshr_index].ip, 0, 6, temp_metadata);
+
+                }
+            }
 #endif
 
-				// Neelu: Pushing Prefetches from L2 to L1 after they fill in L2.
+			// Neelu: Pushing Prefetches from L2 to L1 after they fill in L2.
 #ifdef PUSH_PREFETCHES_FROM_L2_TO_L1
-				if ((cache_type == IS_L2C) && (MSHR.entry[mshr_index].type == PREFETCH) && (MSHR.entry[mshr_index].fill_level == FILL_L2)) {
-					// Neelu: Modifying the metadata to include a set bit (17th lsb bit) that will convey that this request is already translated.
-					// uint32_t updated_metadata = MSHR.entry[mshr_index].pf_metadata | (1 << 16);
-					// Neelu: Commenting this, because now, this bit will be set by the L2C prefetcher in the cache_fill function.
-					// Hence, argument passed will directly be MSHR packet's metadata instead of updated_metadata if the bit is set.
-					if (((MSHR.entry[mshr_index].pf_metadata >> 16) & 1) == 1)
-						ooo_cpu[fill_cpu].L1D.prefetch_line(MSHR.entry[mshr_index].ip, MSHR.entry[mshr_index].full_addr, MSHR.entry[mshr_index].full_addr, FILL_L1, MSHR.entry[mshr_index].pf_metadata);
-				}
+			if ((cache_type == IS_L2C) && (MSHR.entry[mshr_index].type == PREFETCH) && (MSHR.entry[mshr_index].fill_level == FILL_L2)) {
+				// Neelu: Modifying the metadata to include a set bit (17th lsb bit) that will convey that this request is already translated.
+				// uint32_t updated_metadata = MSHR.entry[mshr_index].pf_metadata | (1 << 16);
+				// Neelu: Commenting this, because now, this bit will be set by the L2C prefetcher in the cache_fill function.
+				// Hence, argument passed will directly be MSHR packet's metadata instead of updated_metadata if the bit is set.
+				if (((MSHR.entry[mshr_index].pf_metadata >> 16) & 1) == 1)
+					ooo_cpu[fill_cpu].L1D.prefetch_line(MSHR.entry[mshr_index].ip, MSHR.entry[mshr_index].full_addr, MSHR.entry[mshr_index].full_addr, FILL_L1, MSHR.entry[mshr_index].pf_metadata);
+			}
 
 #endif
-			} // (Aditya)
 
 			// check fill level
 			if (MSHR.entry[mshr_index].fill_level < fill_level) {
@@ -455,7 +393,6 @@ void CACHE::handle_fill() {
 						upper_level_dcache[fill_cpu]->return_data(&MSHR.entry[mshr_index]);
 				}
 			}
-
 			//@v if send_both_tlb == 1 in STLB, response should return to both ITLB and DTLB
 
 			// update processed packets
@@ -714,10 +651,6 @@ void CACHE::handle_writeback() {
 				}
 
 				if (do_fill) {
-					// (Aditya): Debug
-					// cout << "[Writeback: " << this->NAME << "]: Evicting address: " << std::hex << block[set][way].address << " from set: " << std::dec << set << ", way: " << way << "; Filling in address: " << std::hex << WQ.entry[index].address << std::dec << endl;
-					// (Aditya): -----
-
 					// update prefetcher
 					if (cache_type == IS_L1I)
 						l1i_prefetcher_cache_fill(writeback_cpu, ((WQ.entry[index].ip) >> LOG2_BLOCK_SIZE) << LOG2_BLOCK_SIZE, set, way, 0, ((block[set][way].ip) >> LOG2_BLOCK_SIZE) << LOG2_BLOCK_SIZE);
@@ -746,7 +679,7 @@ void CACHE::handle_writeback() {
 
 					} else if (cache_type == IS_L2C)
 						WQ.entry[index].pf_metadata = l2c_prefetcher_cache_fill(WQ.entry[index].address << LOG2_BLOCK_SIZE, set, way, 0,
-							block[set][way].address << LOG2_BLOCK_SIZE, WQ.entry[index].pf_metadata,WRITEBACK);
+							block[set][way].address << LOG2_BLOCK_SIZE, WQ.entry[index].pf_metadata);
 					if (cache_type == IS_LLC) {
 						cpu = writeback_cpu;
 						WQ.entry[index].pf_metadata = llc_prefetcher_cache_fill(WQ.entry[index].address << LOG2_BLOCK_SIZE, set, way, 0,
@@ -760,17 +693,6 @@ void CACHE::handle_writeback() {
 					// COLLECT STATS
 					sim_miss[writeback_cpu][WQ.entry[index].type]++;
 					sim_access[writeback_cpu][WQ.entry[index].type]++;
-
-					// (Aditya): Remove the address in any other cache, before putting it into this cache.
-					if (cache_type != IS_L1I)
-						ooo_cpu[WQ.entry[index].cpu].L1I.invalidate_entry(WQ.entry[index].address);
-					if (cache_type != IS_L1D)
-						ooo_cpu[WQ.entry[index].cpu].L1D.invalidate_entry(WQ.entry[index].address);
-					if (cache_type != IS_L2C)
-						ooo_cpu[WQ.entry[index].cpu].L2C.invalidate_entry(WQ.entry[index].address);
-					if (cache_type != IS_LLC)
-						uncore.LLC.invalidate_entry(WQ.entry[index].address);
-					// (Aditya): ------------------------------------------------------------------------
 
 					fill_cache(set, way, &WQ.entry[index]);
 
@@ -1059,10 +981,6 @@ void CACHE::handle_processed() {
 }
 
 void CACHE::handle_read() {
-	// (Aditya): Debug
-	cout << "Violations so far: " << violations << endl;
-	// (Aditya): -----
-
 	if (cache_type == IS_L1D) {
 		//	cout << "Handle read cycle: " << current_core_cycle[cpu] << "PQ Occupancy: " << PQ.occupancy << endl;
 		sum_pq_occupancy += PQ.occupancy;
@@ -1184,31 +1102,14 @@ void CACHE::handle_read() {
 					}
 
 				} else if (cache_type == IS_L1I) {
-					// (Aditya): assert exclusivity
-					assert_exclusivity(&RQ.entry[index], NAME, &ooo_cpu[RQ.entry[index].cpu].L2C, &uncore.LLC);
-					// (Aditya): ------------------
-
 					if (PROCESSED.occupancy < PROCESSED.SIZE)
 						PROCESSED.add_queue(&RQ.entry[index]);
 				}
 				// else if (cache_type == IS_L1D) {
 				else if ((cache_type == IS_L1D) && (RQ.entry[index].type != PREFETCH)) {
-					// (Aditya): assert exclusivity
-					assert_exclusivity(&RQ.entry[index], NAME, &ooo_cpu[RQ.entry[index].cpu].L2C, &uncore.LLC);
-					// (Aditya): ------------------
-
 					if (PROCESSED.occupancy < PROCESSED.SIZE)
 						PROCESSED.add_queue(&RQ.entry[index]);
-				} else if (cache_type == IS_L2C) {
-					// (Aditya): assert exclusivity
-					assert_exclusivity(&RQ.entry[index], NAME, &ooo_cpu[RQ.entry[index].cpu].L1D, &ooo_cpu[RQ.entry[index].cpu].L1I, &uncore.LLC);
-					// (Aditya): ------------------
-				} else if (cache_type == IS_LLC) {
-					// (Aditya): assert exclusivity
-					assert_exclusivity(&RQ.entry[index], NAME, &ooo_cpu[RQ.entry[index].cpu].L1D, &ooo_cpu[RQ.entry[index].cpu].L1I, &ooo_cpu[RQ.entry[index].cpu].L2C);
-					// (Aditya): ------------------
 				}
-
 				if (cache_type == 0) // perfect-ITLB and baseline DTLB
 				{
 					// printf("NAME = ",NAME);
@@ -1236,7 +1137,7 @@ void CACHE::handle_read() {
 					if (cache_type == IS_L1D)
 						l1d_prefetcher_operate(RQ.entry[index].full_addr, RQ.entry[index].ip, 1, RQ.entry[index].type, RQ.entry[index].critical_ip_flag);																																		 // RQ.entry[index].instr_id);
 					else if ((cache_type == IS_L2C) && (RQ.entry[index].type != PREFETCH_TRANSLATION) && (RQ.entry[index].instruction == 0) && (RQ.entry[index].type != LOAD_TRANSLATION) && (RQ.entry[index].type != PREFETCH_TRANSLATION) && (RQ.entry[index].type != TRANSLATION_FROM_L1D)) { // Neelu: for dense region, only invoking on loads, check other l2c_pref_operate as well.
-						l2c_prefetcher_operate(block[set][way].address << LOG2_BLOCK_SIZE, RQ.entry[index].ip, 1, RQ.entry[index].type, 0, RQ.entry[index].critical_ip_flag, block[set][way].prefetch);
+						l2c_prefetcher_operate(block[set][way].address << LOG2_BLOCK_SIZE, RQ.entry[index].ip, 1, RQ.entry[index].type, 0, RQ.entry[index].critical_ip_flag);
 					} else if (cache_type == IS_LLC) {
 						cpu = read_cpu;
 						llc_prefetcher_operate(block[set][way].address << LOG2_BLOCK_SIZE, RQ.entry[index].ip, 1, RQ.entry[index].type, 0);
@@ -1827,7 +1728,7 @@ void CACHE::handle_prefetch() {
 						assert(0);
 						l1d_prefetcher_operate(PQ.entry[index].full_addr, PQ.entry[index].ip, 1, PREFETCH, PQ.entry[index].critical_ip_flag); //, PQ.entry[index].prefetch_id);
 					} else if ((cache_type == IS_L2C) && (RQ.entry[index].type != PREFETCH_TRANSLATION) && (RQ.entry[index].instruction == 0) && (RQ.entry[index].type != LOAD_TRANSLATION) && (RQ.entry[index].type != PREFETCH_TRANSLATION) && (RQ.entry[index].type != TRANSLATION_FROM_L1D)) {
-						PQ.entry[index].pf_metadata = l2c_prefetcher_operate(block[set][way].address << LOG2_BLOCK_SIZE, PQ.entry[index].ip, 1, PREFETCH, PQ.entry[index].pf_metadata, PQ.entry[index].critical_ip_flag, block[set][way].prefetch); // PQ.entry[index].prefetch_id);
+						PQ.entry[index].pf_metadata = l2c_prefetcher_operate(block[set][way].address << LOG2_BLOCK_SIZE, PQ.entry[index].ip, 1, PREFETCH, PQ.entry[index].pf_metadata, PQ.entry[index].critical_ip_flag); // PQ.entry[index].prefetch_id);
 						if ((((PQ.entry[index].pf_metadata >> 17) & 1) | ((PQ.entry[index].pf_metadata >> 18) & 1)) == 1)
 							getting_hint_from_l2++;
 					} else if (cache_type == IS_LLC) {
@@ -1977,7 +1878,7 @@ void CACHE::handle_prefetch() {
 									if (cache_type == IS_L1D)
 										l1d_prefetcher_operate(PQ.entry[index].full_addr, PQ.entry[index].ip, 0, PREFETCH, PQ.entry[index].critical_ip_flag); // PQ.entry[index].prefetch_id);
 									else if ((cache_type == IS_L2C) && (RQ.entry[index].type != PREFETCH_TRANSLATION) && (RQ.entry[index].instruction == 0) && (RQ.entry[index].type != LOAD_TRANSLATION) && (RQ.entry[index].type != PREFETCH_TRANSLATION) && (RQ.entry[index].type != TRANSLATION_FROM_L1D)) {
-										PQ.entry[index].pf_metadata = l2c_prefetcher_operate(PQ.entry[index].address << LOG2_BLOCK_SIZE, PQ.entry[index].ip, 0, PREFETCH, PQ.entry[index].pf_metadata, PQ.entry[index].critical_ip_flag, 0); // PQ.entry[index].prefetch_id);
+										PQ.entry[index].pf_metadata = l2c_prefetcher_operate(PQ.entry[index].address << LOG2_BLOCK_SIZE, PQ.entry[index].ip, 0, PREFETCH, PQ.entry[index].pf_metadata, PQ.entry[index].critical_ip_flag); // PQ.entry[index].prefetch_id);
 										if ((((PQ.entry[index].pf_metadata >> 17) & 1) | ((PQ.entry[index].pf_metadata >> 18) & 1)) == 1)
 											getting_hint_from_l2++;
 									} else if (cache_type == IS_ITLB) {
@@ -3208,6 +3109,22 @@ int CACHE::add_pq(PACKET* packet) {
 int CACHE::check_mshr(PACKET* packet) {
 	return check_nonfifo_queue(&MSHR, packet, true); //@Vishal: Updated from check_mshr
 }
+
+// (Manish):  Added new function to check hit in writeback queue
+int CACHE::check_writeBack(PACKET* packet) {
+
+	assert(cache_type != IS_L1I || cache_type != IS_ITLB || cache_type != IS_DTLB || cache_type != IS_STLB); //@Vishal: L1I cache does not have write packets
+
+	// check for duplicates in the write queue
+	int index = -1;
+	if (cache_type == IS_L1D)
+		index = check_nonfifo_queue(&WQ, packet, false);
+	else
+		index = WQ.check_queue(packet);
+	
+	return index;
+}
+// (Manish):  Ends
 
 void CACHE::return_data(PACKET* packet) {
 	// check MSHR information

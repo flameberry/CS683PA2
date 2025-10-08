@@ -70,6 +70,9 @@ void CACHE::l2c_prefetcher_initialize() {
     }
 }
 
+
+// (Manish):  Added one argumnent at the end of function to check prefetched block
+
 uint32_t CACHE::l2c_prefetcher_operate(uint64_t addr, uint64_t ip, uint8_t cache_hit,
                                        uint8_t type, uint32_t metadata_in, uint8_t critical_ip_flag, uint64_t isPrefetchedblock) {
     if (type != LOAD) return metadata_in;
