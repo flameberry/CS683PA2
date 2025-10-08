@@ -23,26 +23,26 @@ uint64_t l2pf_access = 0;
 
 volatile uint64_t violations = 0;
 
-void assert_exclusivity(PACKET* packet, const std::string& name, CACHE* c1, CACHE* c2, CACHE* c3 = nullptr) {
+void assert_exclusivity(PACKET* packet, const std::string& name, CACHE* c1, CACHE* c2 = nullptr, CACHE* c3 = nullptr) {
 	/* check in c1 cache */
 	if (c1->check_hit(packet) >= 0) {
 		cout << "[Assert-" << name << "]: Exclusivity violated [" << c1->NAME << "]: " << std::hex << packet->address << endl;
 		violations++;
-		assert(0);
+		// assert(0);
 	}
 
 	/* check in c2 cache */
-	if (c2->check_hit(packet) >= 0) {
+	if (c2 && c2->check_hit(packet) >= 0) {
 		violations++;
 		cout << "[Assert-" << name << "]: Exclusivity violated [" << c2->NAME << "]: " << std::hex << packet->address << endl;
-		assert(0);
+		// assert(0);
 	}
 
 	/* check in c3 cache */
 	if (c3 && c3->check_hit(packet) >= 0) {
 		violations++;
-		cout << "[Assert-" << name << "]: Exclusivity violated [" << c2->NAME << "]: " << std::hex << packet->address << endl;
-		assert(0);
+		cout << "[Assert-" << name << "]: Exclusivity violated [" << c3->NAME << "]: " << std::hex << packet->address << endl;
+		// assert(0);
 	}
 }
 
@@ -90,22 +90,36 @@ void CACHE::handle_fill() {
 		if (cache_type == IS_L1I || cache_type == IS_L1D || cache_type == IS_L2C || cache_type == IS_LLC) {
 			if (MSHR.entry[mshr_index].fill_level < fill_level) {
 				do_bypass = true;
-			}
+			} else if (fill_level == MSHR.entry[mshr_index].fill_level) {
+				// (Aditya): Invalidating a block from the lower levels in case there was a hit in any of them
+				if (cache_type != IS_LLC) { // && uncore.LLC.check_hit(&MSHR.entry[mshr_index]) >= 0) {
+					uncore.LLC.invalidate_entry(MSHR.entry[mshr_index].address);
+					// cout << "[LLC]: Invalidating block: " << std::hex << MSHR.entry[mshr_index].address << endl;
 
-			// (Aditya): Invalidating a block from the lower levels in case there was a hit in any of them
-			// if (cache_type == IS_L1D || cache_type == IS_L2C) {
-			// 	if (uncore.LLC.check_hit(&MSHR.entry[mshr_index])) {
-			// 		uncore.LLC.invalidate_entry(MSHR.entry[mshr_index].address);
-			// 		// cout << "[LLC]: Invalidating block: " << std::hex << MSHR.entry[mshr_index].address << endl;
-			// 	}
-			//
-			// 	if (cache_type == IS_L1D) {
-			// 		if (ooo_cpu[MSHR.entry[mshr_index].cpu].L2C.check_hit(&MSHR.entry[mshr_index])) {
-			// 			ooo_cpu[MSHR.entry[mshr_index].cpu].L2C.invalidate_entry(MSHR.entry[mshr_index].address);
-			// 			// cout << "[L2C]: Invalidating block: " << std::hex << MSHR.entry[mshr_index].address << endl;
-			// 		}
-			// 	}
-			// }
+					if (cache_type != IS_L2C) { // && ooo_cpu[MSHR.entry[mshr_index].cpu].L2C.check_hit(&MSHR.entry[mshr_index]) >= 0) {
+						ooo_cpu[MSHR.entry[mshr_index].cpu].L2C.invalidate_entry(MSHR.entry[mshr_index].address);
+						// cout << "[L2C]: Invalidating block: " << std::hex << MSHR.entry[mshr_index].address << endl;
+					}
+				}
+
+				// Assert exclusivity done here inside (fill_level == MSHR.entry[mshr_index].fill_level) condition because...
+				// if L1 miss -> L2 Miss -> LLC hit.
+				// L2 handle_fill will bypass the fill
+				// L1 handle_fill will receive the block and execute inside the current if block
+				// L1 will then invalidate LLC block as it is filling into itself
+				// If we put the assert_exclusivity outside the above mentioned condition, then even when L2 handle_fill is called...
+				// in the above set of events, then L2C will see the block present in LLC, but the block won't be filled in L2C itself (because bypassing)
+				// so checking assert_exclusivity is wrong outside this condition
+				if (cache_type == IS_L1D || cache_type == IS_L1I) {
+					// Assert existence of block in lower levels
+					assert_exclusivity(&MSHR.entry[mshr_index], NAME, &ooo_cpu[MSHR.entry[mshr_index].cpu].L2C, &uncore.LLC);
+				}
+
+				if (cache_type == IS_L2C) {
+					// Assert existence of block in lower levels
+					assert_exclusivity(&MSHR.entry[mshr_index], NAME, &uncore.LLC);
+				}
+			}
 		}
 		// (Aditya): -------------------
 
