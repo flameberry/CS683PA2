@@ -117,7 +117,7 @@ void CACHE::handle_fill() {
 
 				if (cache_type == IS_L2C) {
 					// Assert existence of block in lower levels
-					assert_exclusivity(&MSHR.entry[mshr_index], NAME, &uncore.LLC);
+					assert_exclusivity(&MSHR.entry[mshr_index], NAME, &uncore.LLC, &ooo_cpu[MSHR.entry[mshr_index].cpu].L1D, &ooo_cpu[MSHR.entry[mshr_index].cpu].L1I);
 				}
 			}
 		}
