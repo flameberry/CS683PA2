@@ -26,23 +26,23 @@ volatile uint64_t violations = 0;
 void assert_exclusivity(PACKET* packet, const std::string& name, CACHE* c1, CACHE* c2 = nullptr, CACHE* c3 = nullptr) {
 	/* check in c1 cache */
 	if (c1->check_hit(packet) >= 0) {
-		cout << "[Assert-" << name << "]: Exclusivity violated [" << c1->NAME << "]: " << std::hex << packet->address << endl;
+		cout << "[Assert-" << name << "]: Exclusivity violated [" << c1->NAME << "]: " << std::hex << packet->address << std::dec << endl;
 		violations++;
-		// assert(0);
+		assert(0);
 	}
 
 	/* check in c2 cache */
 	if (c2 && c2->check_hit(packet) >= 0) {
 		violations++;
-		cout << "[Assert-" << name << "]: Exclusivity violated [" << c2->NAME << "]: " << std::hex << packet->address << endl;
-		// assert(0);
+		cout << "[Assert-" << name << "]: Exclusivity violated [" << c2->NAME << "]: " << std::hex << packet->address << std::dec << endl;
+		assert(0);
 	}
 
 	/* check in c3 cache */
 	if (c3 && c3->check_hit(packet) >= 0) {
 		violations++;
-		cout << "[Assert-" << name << "]: Exclusivity violated [" << c3->NAME << "]: " << std::hex << packet->address << endl;
-		// assert(0);
+		cout << "[Assert-" << name << "]: Exclusivity violated [" << c3->NAME << "]: " << std::hex << packet->address << std::dec << endl;
+		assert(0);
 	}
 }
 
@@ -117,7 +117,7 @@ void CACHE::handle_fill() {
 
 				if (cache_type == IS_L2C) {
 					// Assert existence of block in lower levels
-					assert_exclusivity(&MSHR.entry[mshr_index], NAME, &uncore.LLC, &ooo_cpu[MSHR.entry[mshr_index].cpu].L1D, &ooo_cpu[MSHR.entry[mshr_index].cpu].L1I);
+					assert_exclusivity(&MSHR.entry[mshr_index], NAME, &uncore.LLC);
 				}
 			}
 		}
@@ -286,7 +286,7 @@ void CACHE::handle_fill() {
 		if (do_fill) {
 			if (!do_bypass) {
 				// (Aditya): Debug
-				// cout << "[" << this->NAME << "]: Evicting address: " << std::hex << block[set][way].address << " from set: " << std::dec << set << ", way: " << way << "; Filling in address: " << std::hex << MSHR.entry[MSHR.next_fill_index].address << std::dec << endl;
+				cout << "[" << (MSHR.entry[mshr_index].prefetched ? "Prefetched: " : "") << this->NAME << "]: Evicting address: " << std::hex << (block[set][way].valid ? block[set][way].address : -1) << " from set: " << std::dec << set << ", way: " << way << "; Filling in address: " << std::hex << MSHR.entry[mshr_index].address << std::dec << endl;
 				// (Aditya): -----
 
 				//@Vasudha: For PC-offset DTLB prefetcher, in case of eviction, transfer block from training table to trained table
@@ -352,7 +352,11 @@ void CACHE::handle_fill() {
 #ifdef PUSH_DTLB_PB
 				if ((cache_type != IS_DTLB) || (cache_type == IS_DTLB && MSHR.entry[mshr_index].type != PREFETCH_TRANSLATION))
 #endif
-					fill_cache(set, way, &MSHR.entry[mshr_index]);
+					if (check_hit(&MSHR.entry[mshr_index]) < 0) {
+						fill_cache(set, way, &MSHR.entry[mshr_index]);
+					} else {
+						cout << "Khel khatam" << endl;
+					}
 #ifdef PUSH_DTLB_PB
 				else if (cache_type == IS_DTLB && MSHR.entry[mshr_index].type == PREFETCH_TRANSLATION) {
 					uint32_t victim_way;
@@ -729,7 +733,7 @@ void CACHE::handle_writeback() {
 
 				if (do_fill) {
 					// (Aditya): Debug
-					// cout << "[Writeback: " << this->NAME << "]: Evicting address: " << std::hex << block[set][way].address << " from set: " << std::dec << set << ", way: " << way << "; Filling in address: " << std::hex << WQ.entry[index].address << std::dec << endl;
+					cout << "[Writeback: " << this->NAME << "]: Evicting address: " << std::hex << (block[set][way].valid ? block[set][way].address : -1) << " from set: " << std::dec << set << ", way: " << way << "; Filling in address: " << std::hex << WQ.entry[index].address << std::dec << endl;
 					// (Aditya): -----
 
 					// update prefetcher
@@ -759,8 +763,10 @@ void CACHE::handle_writeback() {
 						l1d_prefetcher_cache_fill(v_fill_addr, WQ.entry[index].full_addr, set, way, 0, v_evicted_addr, block[set][way].address << LOG2_BLOCK_SIZE, WQ.entry[index].pf_metadata);
 
 					} else if (cache_type == IS_L2C)
+						// (Manish):  Added one argumnent at the end of just by dafault dummy type but put writeback to cater writebacks in case of exclusive cache prefetcher
 						WQ.entry[index].pf_metadata = l2c_prefetcher_cache_fill(WQ.entry[index].address << LOG2_BLOCK_SIZE, set, way, 0,
-							block[set][way].address << LOG2_BLOCK_SIZE, WQ.entry[index].pf_metadata);
+							block[set][way].address << LOG2_BLOCK_SIZE, WQ.entry[index].pf_metadata, WRITEBACK);
+					// (Manish): Ends
 					if (cache_type == IS_LLC) {
 						cpu = writeback_cpu;
 						WQ.entry[index].pf_metadata = llc_prefetcher_cache_fill(WQ.entry[index].address << LOG2_BLOCK_SIZE, set, way, 0,
@@ -1250,7 +1256,9 @@ void CACHE::handle_read() {
 					if (cache_type == IS_L1D)
 						l1d_prefetcher_operate(RQ.entry[index].full_addr, RQ.entry[index].ip, 1, RQ.entry[index].type, RQ.entry[index].critical_ip_flag);																																		 // RQ.entry[index].instr_id);
 					else if ((cache_type == IS_L2C) && (RQ.entry[index].type != PREFETCH_TRANSLATION) && (RQ.entry[index].instruction == 0) && (RQ.entry[index].type != LOAD_TRANSLATION) && (RQ.entry[index].type != PREFETCH_TRANSLATION) && (RQ.entry[index].type != TRANSLATION_FROM_L1D)) { // Neelu: for dense region, only invoking on loads, check other l2c_pref_operate as well.
-						l2c_prefetcher_operate(block[set][way].address << LOG2_BLOCK_SIZE, RQ.entry[index].ip, 1, RQ.entry[index].type, 0, RQ.entry[index].critical_ip_flag);
+						// (Manish):  Added one argument at the end of function to check prefetched block
+						l2c_prefetcher_operate(block[set][way].address << LOG2_BLOCK_SIZE, RQ.entry[index].ip, 1, RQ.entry[index].type, 0, RQ.entry[index].critical_ip_flag, block[set][way].prefetch);
+						// (Manish): Ends
 					} else if (cache_type == IS_LLC) {
 						cpu = read_cpu;
 						llc_prefetcher_operate(block[set][way].address << LOG2_BLOCK_SIZE, RQ.entry[index].ip, 1, RQ.entry[index].type, 0);
@@ -1738,7 +1746,9 @@ void CACHE::handle_read() {
 						if (cache_type == IS_L1D)
 							l1d_prefetcher_operate(RQ.entry[index].full_addr, RQ.entry[index].ip, 0, RQ.entry[index].type, RQ.entry[index].critical_ip_flag); // RQ.entry[index].instr_id);
 						else if ((cache_type == IS_L2C) && (RQ.entry[index].type != PREFETCH_TRANSLATION) && (RQ.entry[index].instruction == 0) && (RQ.entry[index].type != LOAD_TRANSLATION) && (RQ.entry[index].type != PREFETCH_TRANSLATION) && (RQ.entry[index].type != TRANSLATION_FROM_L1D))
-							l2c_prefetcher_operate(RQ.entry[index].address << LOG2_BLOCK_SIZE, RQ.entry[index].ip, 0, RQ.entry[index].type, 0, RQ.entry[index].critical_ip_flag); // RQ.entry[index].instr_id);
+							// (Manish):  Added one argument at the end of function to check prefetched block
+							l2c_prefetcher_operate(RQ.entry[index].address << LOG2_BLOCK_SIZE, RQ.entry[index].ip, 0, RQ.entry[index].type, 0, RQ.entry[index].critical_ip_flag, 0); // RQ.entry[index].instr_id);
+																																													 // (Manish): Ends
 						else if (cache_type == IS_LLC) {
 							cpu = read_cpu;
 							llc_prefetcher_operate(RQ.entry[index].address << LOG2_BLOCK_SIZE, RQ.entry[index].ip, 0, RQ.entry[index].type, 0);
@@ -1841,7 +1851,9 @@ void CACHE::handle_prefetch() {
 						assert(0);
 						l1d_prefetcher_operate(PQ.entry[index].full_addr, PQ.entry[index].ip, 1, PREFETCH, PQ.entry[index].critical_ip_flag); //, PQ.entry[index].prefetch_id);
 					} else if ((cache_type == IS_L2C) && (RQ.entry[index].type != PREFETCH_TRANSLATION) && (RQ.entry[index].instruction == 0) && (RQ.entry[index].type != LOAD_TRANSLATION) && (RQ.entry[index].type != PREFETCH_TRANSLATION) && (RQ.entry[index].type != TRANSLATION_FROM_L1D)) {
-						PQ.entry[index].pf_metadata = l2c_prefetcher_operate(block[set][way].address << LOG2_BLOCK_SIZE, PQ.entry[index].ip, 1, PREFETCH, PQ.entry[index].pf_metadata, PQ.entry[index].critical_ip_flag); // PQ.entry[index].prefetch_id);
+						// (Manish):  Added one argument at the end of function to check prefetched block
+						PQ.entry[index].pf_metadata = l2c_prefetcher_operate(block[set][way].address << LOG2_BLOCK_SIZE, PQ.entry[index].ip, 1, PREFETCH, PQ.entry[index].pf_metadata, PQ.entry[index].critical_ip_flag, block[set][way].prefetch); // PQ.entry[index].prefetch_id);
+						// (Manish): Ends
 						if ((((PQ.entry[index].pf_metadata >> 17) & 1) | ((PQ.entry[index].pf_metadata >> 18) & 1)) == 1)
 							getting_hint_from_l2++;
 					} else if (cache_type == IS_LLC) {
@@ -1900,6 +1912,10 @@ void CACHE::handle_prefetch() {
 							PQ.entry[index].data = block[set][way].data;
 							upper_level_dcache[prefetch_cpu]->return_data(&PQ.entry[index]);
 						}
+
+						// (Aditya): Invalidate
+						invalidate_entry(PQ.entry[index].address);
+						// (Aditya): ----------
 					} else {
 						if (PQ.entry[index].instruction) {
 							PQ.entry[index].data = block[set][way].data;
@@ -1991,7 +2007,9 @@ void CACHE::handle_prefetch() {
 									if (cache_type == IS_L1D)
 										l1d_prefetcher_operate(PQ.entry[index].full_addr, PQ.entry[index].ip, 0, PREFETCH, PQ.entry[index].critical_ip_flag); // PQ.entry[index].prefetch_id);
 									else if ((cache_type == IS_L2C) && (RQ.entry[index].type != PREFETCH_TRANSLATION) && (RQ.entry[index].instruction == 0) && (RQ.entry[index].type != LOAD_TRANSLATION) && (RQ.entry[index].type != PREFETCH_TRANSLATION) && (RQ.entry[index].type != TRANSLATION_FROM_L1D)) {
-										PQ.entry[index].pf_metadata = l2c_prefetcher_operate(PQ.entry[index].address << LOG2_BLOCK_SIZE, PQ.entry[index].ip, 0, PREFETCH, PQ.entry[index].pf_metadata, PQ.entry[index].critical_ip_flag); // PQ.entry[index].prefetch_id);
+										// (Manish):  Added one argument at the end of function to check prefetched block
+										PQ.entry[index].pf_metadata = l2c_prefetcher_operate(PQ.entry[index].address << LOG2_BLOCK_SIZE, PQ.entry[index].ip, 0, PREFETCH, PQ.entry[index].pf_metadata, PQ.entry[index].critical_ip_flag, 0); // PQ.entry[index].prefetch_id);
+										// (Manish): Ends
 										if ((((PQ.entry[index].pf_metadata >> 17) & 1) | ((PQ.entry[index].pf_metadata >> 18) & 1)) == 1)
 											getting_hint_from_l2++;
 									} else if (cache_type == IS_ITLB) {
@@ -2833,6 +2851,63 @@ int CACHE::prefetch_line(uint64_t ip, uint64_t base_addr, uint64_t pf_addr, int 
 		//       cout<<"Aye Aye, Captain, issued.";
 
 		DP(if (warmup_complete[cpu]) { cout << "packet entered in PQ" << endl; });
+
+		// (Manish):  Created a packet to check hit at other levels
+		PACKET test_packet;
+		test_packet.fill_level = pf_fill_level;
+		test_packet.pf_origin_level = fill_level;
+		if (pf_fill_level == FILL_L1) {
+			test_packet.fill_l1d = 1;
+		}
+
+		test_packet.pf_metadata = prefetch_metadata;
+		test_packet.cpu = cpu;
+		test_packet.address = pf_addr >> LOG2_BLOCK_SIZE;
+		test_packet.full_addr = pf_addr;
+		test_packet.full_virtual_address = pf_addr;
+		if ((base_addr >> LOG2_PAGE_SIZE) == (pf_addr >> LOG2_PAGE_SIZE)) {
+			test_packet.full_physical_address = pf_addr;
+		} else
+			test_packet.full_physical_address = 0;
+		test_packet.ip = ip;
+		test_packet.prefetch_id = 0;
+		test_packet.type = LOAD;
+		test_packet.event_cycle = current_core_cycle[cpu];
+
+		if (pf_fill_level >= FILL_L1) {
+			if (ooo_cpu[cpu].L1D.check_hit(&test_packet) != -1)
+				return 0;
+
+			if (ooo_cpu[cpu].L1D.check_mshr(&test_packet) != -1)
+				return 0;
+
+			if (ooo_cpu[cpu].L1D.check_writeBack(&test_packet) != -1)
+				return 0;
+		}
+
+		if (pf_fill_level >= FILL_L2) {
+			if (ooo_cpu[cpu].L2C.check_hit(&test_packet) != -1)
+				return 0;
+
+			if (ooo_cpu[cpu].L2C.check_mshr(&test_packet) != -1)
+				return 0;
+
+			if (ooo_cpu[cpu].L2C.check_writeBack(&test_packet) != -1)
+				return 0;
+		}
+
+		if (pf_fill_level >= FILL_LLC) {
+			if (uncore.LLC.check_hit(&test_packet) != -1)
+				return 0;
+
+			if (uncore.LLC.check_mshr(&test_packet) != -1)
+				return 0;
+
+			if (uncore.LLC.check_writeBack(&test_packet) != -1)
+				return 0;
+		}
+		// (Manish): Ends
+
 		PACKET pf_packet;
 		pf_packet.fill_level = pf_fill_level;
 		pf_packet.pf_origin_level = fill_level;
@@ -2867,6 +2942,10 @@ int CACHE::prefetch_line(uint64_t ip, uint64_t base_addr, uint64_t pf_addr, int 
 			else
 				same_page_prefetch_requests++;
 		}
+
+		// (Aditya): Debug
+		cout << "Prefetch issued for block: " << std::hex << pf_packet.address << std::dec << endl;
+		// (Aditya): -----
 
 		return 1;
 	}
@@ -3222,6 +3301,22 @@ int CACHE::add_pq(PACKET* packet) {
 int CACHE::check_mshr(PACKET* packet) {
 	return check_nonfifo_queue(&MSHR, packet, true); //@Vishal: Updated from check_mshr
 }
+
+// (Manish):  Added new function to check hit in writeback queue
+int CACHE::check_writeBack(PACKET* packet) {
+
+	assert(cache_type != IS_L1I || cache_type != IS_ITLB || cache_type != IS_DTLB || cache_type != IS_STLB); //@Vishal: L1I cache does not have write packets
+
+	// check for duplicates in the write queue
+	int index = -1;
+	if (cache_type == IS_L1D)
+		index = check_nonfifo_queue(&WQ, packet, false);
+	else
+		index = WQ.check_queue(packet);
+
+	return index;
+}
+// (Manish):  Ends
 
 void CACHE::return_data(PACKET* packet) {
 	// check MSHR information
