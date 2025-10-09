@@ -1136,10 +1136,8 @@ void CACHE::handle_read() {
 			// access cache
 			uint32_t set = get_set(RQ.entry[index].address);
 			int way = check_hit(&RQ.entry[index]);
-			int is_present_wb = check_writeBack(&RQ.entry[index]);
-			assert(is_present_wb == -1);
 
-			if (way >= 0 || is_present_wb >= 0) { // read hit
+			if (way >= 0) { // read hit
 
 				if (cache_type == IS_ITLB) {
 
