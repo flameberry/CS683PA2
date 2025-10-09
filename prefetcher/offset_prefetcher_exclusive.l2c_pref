@@ -5,7 +5,7 @@
 #include <map>
 #include <ooo_cpu.h>
 
-#define REGION_TABLE_SIZE 128
+#define REGION_TABLE_SIZE 32
 #define MAX_OFFSETS_PER_REGION 5
 
 using namespace std;
@@ -211,19 +211,18 @@ uint32_t CACHE::l2c_prefetcher_operate(uint64_t addr, uint64_t ip, uint8_t cache
 
 			uint64_t pf_addr = (page_num << LOG2_PAGE_SIZE) | ((uint64_t)pf_offset << LOG2_BLOCK_SIZE);
 
-			// (Manish):  Added this variable for exclusive cache to check 
+			// (Manish):  Added this variable for exclusive cache to check
 			// whether prefetch issued successfully or not and according increasing frequency of offsets
 
 			int nPrefetchissued = 0;
 
-			if (MSHR.occupancy < (MSHR.SIZE * 0.75)){
+			if (MSHR.occupancy < (MSHR.SIZE * 0.75)) {
 				nPrefetchissued = prefetch_line(ip, addr, pf_addr, FILL_L2, 0);
-			}
-			else{
+			} else {
 				nPrefetchissued = prefetch_line(ip, addr, pf_addr, FILL_LLC, 0);
 			}
 
-			if(nPrefetchissued == 0)
+			if (nPrefetchissued == 0)
 				continue;
 
 			// (Manish): Ends
@@ -253,7 +252,7 @@ uint32_t CACHE::l2c_prefetcher_operate(uint64_t addr, uint64_t ip, uint8_t cache
 
 // (Manish):  Added one argumnent at the end of just by dafault dummy type but put writeback to cater writebacks in case of exclusive cache prefetcher
 uint32_t CACHE::l2c_prefetcher_cache_fill(uint64_t addr, uint32_t set, uint32_t match,
-	uint8_t prefetch, uint64_t evicted_addr, uint32_t metadata_in,uint8_t type) {
+	uint8_t prefetch, uint64_t evicted_addr, uint32_t metadata_in, uint8_t type) {
 	if (evicted_addr != 0) {
 		uint64_t evicted_block = evicted_addr >> LOG2_BLOCK_SIZE;
 		prefetch_delta_map.erase(evicted_block);
@@ -261,7 +260,7 @@ uint32_t CACHE::l2c_prefetcher_cache_fill(uint64_t addr, uint32_t set, uint32_t 
 
 	// (Manish):  Changes for exclusive cache
 
-	if (type == WRITEBACK){
+	if (type == WRITEBACK) {
 		uint64_t page_num = get_page_number(addr);
 		uint64_t page_offset = get_page_offset(addr);
 		uint64_t block_addr = addr >> LOG2_BLOCK_SIZE;
@@ -276,9 +275,9 @@ uint32_t CACHE::l2c_prefetcher_cache_fill(uint64_t addr, uint32_t set, uint32_t 
 		}
 
 		if (region_id != -1) {
-			
+
 			RegionEntry& region = region_table[region_id];
-			if(region.last_offset != 0 && region.accesses > 1){
+			if (region.last_offset != 0 && region.accesses > 1) {
 				int64_t delta = (int64_t)page_offset - (int64_t)region.last_offset;
 
 				if (delta != 0) {
@@ -293,13 +292,12 @@ uint32_t CACHE::l2c_prefetcher_cache_fill(uint64_t addr, uint32_t set, uint32_t 
 							break;
 						}
 					}
-					if(found){
+					if (found) {
 						region.last_offset = page_offset;
 					}
 				}
 			}
 		}
-		
 	}
 	// (Manish): Ends
 	return metadata_in;

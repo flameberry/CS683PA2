@@ -197,9 +197,9 @@ void CACHE::handle_fill() {
 					// MSHR.num_returned--;
 					MSHR.entry[mshr_index].returned = INFLIGHT;
 					if (lower_level)
-						lower_level->add_rq(&MSHR.entry[mshr_index]);
-					update_fill_cycle();
-					return;
+						// 	lower_level->add_rq(&MSHR.entry[mshr_index]);
+						// update_fill_cycle();
+						return;
 					//}
 					/*else	//PREFETCH merged with LOAD/RFO
 					  {
@@ -286,7 +286,7 @@ void CACHE::handle_fill() {
 		if (do_fill) {
 			if (!do_bypass) {
 				// (Aditya): Debug
-				cout << "[" << (MSHR.entry[mshr_index].prefetched ? "Prefetched: " : "") << this->NAME << "]: Evicting address: " << std::hex << (block[set][way].valid ? block[set][way].address : -1) << " from set: " << std::dec << set << ", way: " << way << "; Filling in address: " << std::hex << MSHR.entry[mshr_index].address << std::dec << endl;
+				// cout << "[" << (MSHR.entry[mshr_index].prefetched ? "Prefetched: " : "") << this->NAME << "]: Evicting address: " << std::hex << (block[set][way].valid ? block[set][way].address : -1) << " from set: " << std::dec << set << ", way: " << way << "; Filling in address: " << std::hex << MSHR.entry[mshr_index].address << std::dec << endl;
 				// (Aditya): -----
 
 				//@Vasudha: For PC-offset DTLB prefetcher, in case of eviction, transfer block from training table to trained table
@@ -733,7 +733,7 @@ void CACHE::handle_writeback() {
 
 				if (do_fill) {
 					// (Aditya): Debug
-					cout << "[Writeback: " << this->NAME << "]: Evicting address: " << std::hex << (block[set][way].valid ? block[set][way].address : -1) << " from set: " << std::dec << set << ", way: " << way << "; Filling in address: " << std::hex << WQ.entry[index].address << std::dec << endl;
+					// cout << "[Writeback: " << this->NAME << "]: Evicting address: " << std::hex << (block[set][way].valid ? block[set][way].address : -1) << " from set: " << std::dec << set << ", way: " << way << "; Filling in address: " << std::hex << WQ.entry[index].address << std::dec << endl;
 					// (Aditya): -----
 
 					// update prefetcher
@@ -2944,7 +2944,7 @@ int CACHE::prefetch_line(uint64_t ip, uint64_t base_addr, uint64_t pf_addr, int 
 		}
 
 		// (Aditya): Debug
-		cout << "Prefetch issued for block: " << std::hex << pf_packet.address << std::dec << endl;
+		// cout << "Prefetch issued for block: " << std::hex << pf_packet.address << std::dec << endl;
 		// (Aditya): -----
 
 		return 1;
