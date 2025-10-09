@@ -18,7 +18,7 @@ L1D has LRU replacement policy
 CPU 0 Region based L2 offset prefetcher
 L2C has LRU replacement policy
 LLC has LRU replacement policy
-Heartbeat CPU 0 instructions: 10000003 cycles: 2500077 heartbeat IPC: 3.99988 cumulative IPC: 3.99988 (Simulation time: 0 hr 0 min 5 sec) 
+Heartbeat CPU 0 instructions: 10000003 cycles: 2500077 heartbeat IPC: 3.99988 cumulative IPC: 3.99988 (Simulation time: 0 hr 0 min 4 sec) 
 Khel khatam
 Khel khatam
 Khel khatam
@@ -28,15 +28,15 @@ Khel khatam
 Khel khatam
 Khel khatam
 Khel khatam
-Heartbeat CPU 0 instructions: 20000007 cycles: 5006010 heartbeat IPC: 3.99053 cumulative IPC: 3.9952 (Simulation time: 0 hr 0 min 9 sec) 
+Heartbeat CPU 0 instructions: 20000007 cycles: 5006010 heartbeat IPC: 3.99053 cumulative IPC: 3.9952 (Simulation time: 0 hr 0 min 8 sec) 
 
-Warmup complete CPU 0 instructions: 25000008 cycles: 6256009 (Simulation time: 0 hr 0 min 11 sec) 
+Warmup complete CPU 0 instructions: 25000008 cycles: 6256009 (Simulation time: 0 hr 0 min 10 sec) 
 
-Heartbeat CPU 0 instructions: 30000003 cycles: 14264650 heartbeat IPC: 1.08007 cumulative IPC: 0.624325 (Simulation time: 0 hr 0 min 25 sec) 
-Heartbeat CPU 0 instructions: 40000003 cycles: 30771985 heartbeat IPC: 0.605791 cumulative IPC: 0.611846 (Simulation time: 0 hr 0 min 54 sec) 
+Heartbeat CPU 0 instructions: 30000003 cycles: 14264650 heartbeat IPC: 1.08007 cumulative IPC: 0.624325 (Simulation time: 0 hr 0 min 24 sec) 
+Heartbeat CPU 0 instructions: 40000003 cycles: 30771985 heartbeat IPC: 0.605791 cumulative IPC: 0.611846 (Simulation time: 0 hr 0 min 52 sec) 
 Khel khatam
-Heartbeat CPU 0 instructions: 50000001 cycles: 47661905 heartbeat IPC: 0.592069 cumulative IPC: 0.603779 (Simulation time: 0 hr 1 min 24 sec) 
-Finished CPU 0 instructions: 25000001 cycles: 41405897 cumulative IPC: 0.603779 (Simulation time: 0 hr 1 min 24 sec) 
+Heartbeat CPU 0 instructions: 50000001 cycles: 47661905 heartbeat IPC: 0.592069 cumulative IPC: 0.603779 (Simulation time: 0 hr 1 min 21 sec) 
+Finished CPU 0 instructions: 25000001 cycles: 41405897 cumulative IPC: 0.603779 (Simulation time: 0 hr 1 min 21 sec) 
 
 ChampSim completed all CPUs
 
