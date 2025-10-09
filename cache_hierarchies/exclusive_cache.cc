@@ -90,15 +90,20 @@ void CACHE::handle_fill() {
 		if (cache_type == IS_L1I || cache_type == IS_L1D || cache_type == IS_L2C || cache_type == IS_LLC) {
 			if (MSHR.entry[mshr_index].fill_level < fill_level) {
 				do_bypass = true;
+				cout << "[" << NAME << "]: Bypassing block: " << std::hex << MSHR.entry[mshr_index].address << std::dec << std::endl;
 			} else if (fill_level == MSHR.entry[mshr_index].fill_level) {
 				// (Aditya): Invalidating a block from the lower levels in case there was a hit in any of them
 				if (cache_type != IS_LLC) { // && uncore.LLC.check_hit(&MSHR.entry[mshr_index]) >= 0) {
-					uncore.LLC.invalidate_entry(MSHR.entry[mshr_index].address);
-					// cout << "[LLC]: Invalidating block: " << std::hex << MSHR.entry[mshr_index].address << endl;
+					if (int inv_way = uncore.LLC.invalidate_entry(MSHR.entry[mshr_index].address); inv_way >= 0) {
+						int inv_set = uncore.LLC.get_set(MSHR.entry[mshr_index].address);
+						cout << "[" << NAME << "]: Invalidating block in LLC: " << std::hex << MSHR.entry[mshr_index].address << std::dec << ", set: " << inv_set << ", way: " << inv_way << std::endl;
+					}
 
 					if (cache_type != IS_L2C) { // && ooo_cpu[MSHR.entry[mshr_index].cpu].L2C.check_hit(&MSHR.entry[mshr_index]) >= 0) {
-						ooo_cpu[MSHR.entry[mshr_index].cpu].L2C.invalidate_entry(MSHR.entry[mshr_index].address);
-						// cout << "[L2C]: Invalidating block: " << std::hex << MSHR.entry[mshr_index].address << endl;
+						if (int inv_way = ooo_cpu[MSHR.entry[mshr_index].cpu].L2C.invalidate_entry(MSHR.entry[mshr_index].address); inv_way >= 0) {
+							int inv_set = ooo_cpu[MSHR.entry[mshr_index].cpu].L2C.get_set(MSHR.entry[mshr_index].address);
+							cout << "[" << NAME << "]: Invalidating block in L2C: " << std::hex << MSHR.entry[mshr_index].address << std::dec << ", set: " << inv_set << ", way: " << inv_way << std::endl;
+						}
 					}
 				}
 
@@ -244,7 +249,7 @@ void CACHE::handle_fill() {
 		// if (block[set][way].dirty) {
 
 		// (Aditya): Every evicted block in exclusive hierarchy must be written back to the lower level cache
-		if (cache_type == IS_L1I || cache_type == IS_L1D || cache_type == IS_L2C || block[set][way].dirty) {
+		if (!do_bypass && block[set][way].valid && (cache_type == IS_L1I || cache_type == IS_L1D || cache_type == IS_L2C || block[set][way].dirty)) {
 			// check if the lower level WQ has enough room to keep this writeback request
 			if (lower_level) {
 				if (lower_level->get_occupancy(2, block[set][way].address) == lower_level->get_size(2, block[set][way].address)) {
@@ -272,6 +277,7 @@ void CACHE::handle_fill() {
 					writeback_packet.event_cycle = current_core_cycle[fill_cpu];
 
 					lower_level->add_wq(&writeback_packet);
+					cout << "[" << NAME << "]: Inserted into writeback queue of lower level: " << std::hex << writeback_packet.address << std::dec << ", set: " << set << ", way: " << way << std::endl;
 				}
 			}
 #ifdef SANITY_CHECK
@@ -286,7 +292,7 @@ void CACHE::handle_fill() {
 		if (do_fill) {
 			if (!do_bypass) {
 				// (Aditya): Debug
-				// cout << "[" << (MSHR.entry[mshr_index].prefetched ? "Prefetched: " : "") << this->NAME << "]: Evicting address: " << std::hex << (block[set][way].valid ? block[set][way].address : -1) << " from set: " << std::dec << set << ", way: " << way << "; Filling in address: " << std::hex << MSHR.entry[mshr_index].address << std::dec << endl;
+				cout << "[" << (MSHR.entry[mshr_index].prefetched ? "Prefetched: " : "") << this->NAME << "]: Evicting address: " << std::hex << (block[set][way].valid ? block[set][way].address : -1) << " from set: " << std::dec << set << ", way: " << way << "; Filling in address: " << std::hex << MSHR.entry[mshr_index].address << std::dec << endl;
 				// (Aditya): -----
 
 				//@Vasudha: For PC-offset DTLB prefetcher, in case of eviction, transfer block from training table to trained table
@@ -691,7 +697,10 @@ void CACHE::handle_writeback() {
 				uint8_t do_fill = 1;
 
 				// is this dirty?
-				if (block[set][way].dirty) {
+				// if (block[set][way].dirty) {
+
+				// (Aditya): Writeback should be done irrespective of whether the block is dirty
+				if (block[set][way].valid && (cache_type == IS_L1I || cache_type == IS_L1D || cache_type == IS_L2C || block[set][way].dirty)) {
 
 					// check if the lower level WQ has enough room to keep this writeback request
 					if (lower_level) {
@@ -720,6 +729,7 @@ void CACHE::handle_writeback() {
 							writeback_packet.event_cycle = current_core_cycle[writeback_cpu];
 
 							lower_level->add_wq(&writeback_packet);
+							cout << "[" << NAME << "]: Inserted into writeback queue of lower level: " << std::hex << writeback_packet.address << std::dec << ", set: " << set << ", way: " << way << std::endl;
 						}
 					}
 #ifdef SANITY_CHECK
@@ -733,7 +743,7 @@ void CACHE::handle_writeback() {
 
 				if (do_fill) {
 					// (Aditya): Debug
-					// cout << "[Writeback: " << this->NAME << "]: Evicting address: " << std::hex << (block[set][way].valid ? block[set][way].address : -1) << " from set: " << std::dec << set << ", way: " << way << "; Filling in address: " << std::hex << WQ.entry[index].address << std::dec << endl;
+					cout << "[Writeback: " << this->NAME << "]: Evicting address: " << std::hex << (block[set][way].valid ? block[set][way].address : -1) << " from set: " << std::dec << set << ", way: " << way << "; Filling in address: " << std::hex << WQ.entry[index].address << std::dec << endl;
 					// (Aditya): -----
 
 					// update prefetcher
@@ -782,14 +792,14 @@ void CACHE::handle_writeback() {
 					sim_access[writeback_cpu][WQ.entry[index].type]++;
 
 					// (Aditya): Remove the address in any other cache, before putting it into this cache.
-					if (cache_type != IS_L1I)
-						ooo_cpu[WQ.entry[index].cpu].L1I.invalidate_entry(WQ.entry[index].address);
-					if (cache_type != IS_L1D)
-						ooo_cpu[WQ.entry[index].cpu].L1D.invalidate_entry(WQ.entry[index].address);
-					if (cache_type != IS_L2C)
-						ooo_cpu[WQ.entry[index].cpu].L2C.invalidate_entry(WQ.entry[index].address);
-					if (cache_type != IS_LLC)
-						uncore.LLC.invalidate_entry(WQ.entry[index].address);
+					// if (cache_type != IS_L1I)
+					// 	ooo_cpu[WQ.entry[index].cpu].L1I.invalidate_entry(WQ.entry[index].address);
+					// if (cache_type != IS_L1D)
+					// 	ooo_cpu[WQ.entry[index].cpu].L1D.invalidate_entry(WQ.entry[index].address);
+					// if (cache_type != IS_L2C)
+					// 	ooo_cpu[WQ.entry[index].cpu].L2C.invalidate_entry(WQ.entry[index].address);
+					// if (cache_type != IS_LLC)
+					// 	uncore.LLC.invalidate_entry(WQ.entry[index].address);
 					// (Aditya): ------------------------------------------------------------------------
 
 					fill_cache(set, way, &WQ.entry[index]);
@@ -1126,8 +1136,10 @@ void CACHE::handle_read() {
 			// access cache
 			uint32_t set = get_set(RQ.entry[index].address);
 			int way = check_hit(&RQ.entry[index]);
+			int is_present_wb = check_writeBack(&RQ.entry[index]);
+			assert(is_present_wb == -1);
 
-			if (way >= 0) { // read hit
+			if (way >= 0 || is_present_wb >= 0) { // read hit
 
 				if (cache_type == IS_ITLB) {
 
@@ -1912,10 +1924,6 @@ void CACHE::handle_prefetch() {
 							PQ.entry[index].data = block[set][way].data;
 							upper_level_dcache[prefetch_cpu]->return_data(&PQ.entry[index]);
 						}
-
-						// (Aditya): Invalidate
-						invalidate_entry(PQ.entry[index].address);
-						// (Aditya): ----------
 					} else {
 						if (PQ.entry[index].instruction) {
 							PQ.entry[index].data = block[set][way].data;
@@ -2944,7 +2952,7 @@ int CACHE::prefetch_line(uint64_t ip, uint64_t base_addr, uint64_t pf_addr, int 
 		}
 
 		// (Aditya): Debug
-		// cout << "Prefetch issued for block: " << std::hex << pf_packet.address << std::dec << endl;
+		cout << "Prefetch issued for block: " << std::hex << pf_packet.address << std::dec << endl;
 		// (Aditya): -----
 
 		return 1;
