@@ -87,7 +87,8 @@ void CACHE::handle_fill() {
 
 		uint8_t do_fill = 1;
 
-		// (Aditya): Bypass block to L1D
+		// (Aditya): Any block whose fill level is lower than current cache level should be bypassed to that fill level
+		// i.e. the block won't be filled in the current level.
 		bool do_bypass = false;
 		if (cache_type == IS_L1I || cache_type == IS_L1D || cache_type == IS_L2C || cache_type == IS_LLC) {
 			if (MSHR.entry[mshr_index].fill_level < fill_level) {
@@ -96,19 +97,23 @@ void CACHE::handle_fill() {
 				cout << "[" << NAME << "]: Bypassing block: " << std::hex << MSHR.entry[mshr_index].address << std::dec << std::endl;
 #endif
 			} else if (fill_level == MSHR.entry[mshr_index].fill_level) {
-				// (Aditya): Invalidating a block from the lower levels in case there was a hit in any of them
+				// (Aditya): The block is to be filled in the current cache level, so it should be invalidated in the lower level of caches (LLC side)
+				// Even though we are bypassing the block but consider this: Block exists in LLC, but not in L1D and L2C.
+				// CPU demands that block, L1 Miss -> L2 Miss -> LLC Hit
+				// That block will be sent to L2 which will bypass the block from itself, and L1 will fill. But LLC also contains that block, so...
+				// it needs to be invalidated
 				if (cache_type != IS_LLC) { // && uncore.LLC.check_hit(&MSHR.entry[mshr_index]) >= 0) {
 					if (int inv_way = uncore.LLC.invalidate_entry(MSHR.entry[mshr_index].address); inv_way >= 0) {
-						int inv_set = uncore.LLC.get_set(MSHR.entry[mshr_index].address);
 #ifdef ENABLE_LOGGING
+						int inv_set = uncore.LLC.get_set(MSHR.entry[mshr_index].address);
 						cout << "[" << NAME << "]: Invalidating block in LLC: " << std::hex << MSHR.entry[mshr_index].address << std::dec << ", set: " << inv_set << ", way: " << inv_way << std::endl;
 #endif
 					}
 
 					if (cache_type != IS_L2C) { // && ooo_cpu[MSHR.entry[mshr_index].cpu].L2C.check_hit(&MSHR.entry[mshr_index]) >= 0) {
 						if (int inv_way = ooo_cpu[MSHR.entry[mshr_index].cpu].L2C.invalidate_entry(MSHR.entry[mshr_index].address); inv_way >= 0) {
-							int inv_set = ooo_cpu[MSHR.entry[mshr_index].cpu].L2C.get_set(MSHR.entry[mshr_index].address);
 #ifdef ENABLE_LOGGING
+							int inv_set = ooo_cpu[MSHR.entry[mshr_index].cpu].L2C.get_set(MSHR.entry[mshr_index].address);
 							cout << "[" << NAME << "]: Invalidating block in L2C: " << std::hex << MSHR.entry[mshr_index].address << std::dec << ", set: " << inv_set << ", way: " << inv_way << std::endl;
 #endif
 						}
@@ -134,7 +139,7 @@ void CACHE::handle_fill() {
 				}
 			}
 		}
-		// (Aditya): -------------------
+		// (Aditya): ------------------------------------------------------------------------------
 
 		// Prefetch translation requests should be dropped in case of page fault
 		if (cache_type == IS_ITLB || cache_type == IS_DTLB || cache_type == IS_STLB) {
@@ -256,7 +261,12 @@ void CACHE::handle_fill() {
 		// is this dirty?
 		// if (block[set][way].dirty) {
 
-		// (Aditya): Every evicted block in exclusive hierarchy must be written back to the lower level cache
+		// (Aditya): Every evicted block in exclusive hierarchy must be written back to the lower level cache irrespective of whether it is dirty or not
+		// Here two important realisations happened.
+		// First: Checking block[set][way].valid. It was not being done in the non-inclusive implementation because invalidate_entry was not being used
+		// but now invalidate_entry is being done in handle_fill, so if some block marked dirty is invalidated then it would've been written back
+		// Second: !do_bypass condition. Consider L1 Miss -> L2 Miss -> LLC Miss. Inside handle_fill call of L2 Miss, the block will be not filled
+		// because it is being bypassed to the upper level. So if this condition is not given then L2 will issue a writeback even though L2 is not actually evicting anything.
 		if (!do_bypass && block[set][way].valid && (cache_type == IS_L1I || cache_type == IS_L1D || cache_type == IS_L2C || block[set][way].dirty)) {
 			// check if the lower level WQ has enough room to keep this writeback request
 			if (lower_level) {
@@ -300,12 +310,12 @@ void CACHE::handle_fill() {
 		}
 
 		if (do_fill) {
+			// (Aditya): The bypassing of block is done here, prefetcher data updating is also bypassed
+			// as if the block is not being filled then there is no point
 			if (!do_bypass) {
-// (Aditya): Debug
 #ifdef ENABLE_LOGGING
 				cout << "[" << (MSHR.entry[mshr_index].prefetched ? "Prefetched: " : "") << this->NAME << "]: Evicting address: " << std::hex << (block[set][way].valid ? block[set][way].address : -1) << " from set: " << std::dec << set << ", way: " << way << "; Filling in address: " << std::hex << MSHR.entry[mshr_index].address << std::dec << endl;
 #endif
-				// (Aditya): -----
 
 				//@Vasudha: For PC-offset DTLB prefetcher, in case of eviction, transfer block from training table to trained table
 				if (cache_type == IS_DTLB && block[set][way].valid == 1) {
@@ -370,6 +380,7 @@ void CACHE::handle_fill() {
 #ifdef PUSH_DTLB_PB
 				if ((cache_type != IS_DTLB) || (cache_type == IS_DTLB && MSHR.entry[mshr_index].type != PREFETCH_TRANSLATION))
 #endif
+					// (Aditya): This condition should always be satisfied, earlier it wasn't because of a logic flaw.
 					if (check_hit(&MSHR.entry[mshr_index]) < 0) {
 						fill_cache(set, way, &MSHR.entry[mshr_index]);
 					} else {
@@ -709,12 +720,18 @@ void CACHE::handle_writeback() {
 				way = (this->*find_victim)(writeback_cpu, WQ.entry[index].instr_id, set, block[set], WQ.entry[index].ip, WQ.entry[index].full_addr, WQ.entry[index].type);
 
 				uint8_t do_fill = 1;
+
+				// (Aditya): A valid bit is added to each PACKET to allow invalidation of writeback entries in writeback queues
+				// This is a major change as this allows us to invalidate a writeback buffer when a writeback hit occurs and the data is sent to upper levels.
+				// In that case we shouldn't writeback that packet anymore as it is sent to the upper levels to maintain exclusivity.
 				bool bypass_wb = !WQ.entry[index].valid;
 
 				// is this dirty?
 				// if (block[set][way].dirty) {
 
 				// (Aditya): Writeback should be done irrespective of whether the block is dirty
+				// Important change: if we decide to skip writeback because the writeback entry is invalid,
+				// then we don't evict anything and hence the evicted block shouldn't be sent to the writeback queue of the lower level cache
 				if (!bypass_wb && block[set][way].valid && (cache_type == IS_L1I || cache_type == IS_L1D || cache_type == IS_L2C || block[set][way].dirty)) {
 
 					// check if the lower level WQ has enough room to keep this writeback request
@@ -823,7 +840,7 @@ void CACHE::handle_writeback() {
 						// if (cache_type != IS_LLC)
 						// 	uncore.LLC.invalidate_entry(WQ.entry[index].address);
 
-						// (Aditya): Adding asserts here
+						// (Aditya): Additional asserts being put here to ensure exclusivity edge cases
 						if (cache_type != IS_LLC) {
 							assert_exclusivity(&WQ.entry[index], NAME, &uncore.LLC);
 							if (cache_type != IS_L2C)
@@ -2430,7 +2447,7 @@ int CACHE::add_rq(PACKET* packet) {
 #ifdef ENABLE_LOGGING
 		cout << "[" << NAME << "]: Writeback hit: " << std::hex << packet->address << std::dec << endl;
 #endif
-		// (Aditya): -----
+		// (Aditya): ------------------------------------------
 
 		// Neelu: 1 cycle WQ forwarding latency added.
 		if (packet->event_cycle < current_core_cycle[packet->cpu])
@@ -2789,7 +2806,12 @@ int CACHE::add_wq(PACKET* packet) {
 			assert(0);
 		}
 
-		// (Aditya): if the existing writeback packet is invalid, then we can set it to valid as a part of merging
+		// (Aditya): if the existing writeback packet is invalid, then we are setting it to valid as a part of merging
+		// For example: If a block is in L1, and L1 decides to evict it into the writeback queue b/w L1 - L2.
+		// CPU then demands that block, then it will be a L1 miss but a writeback hit, so the block will be sent to L1
+		// ... and invalidated in the writeback queue. After a while if L1 again evicts that block into the writeback queue of lower level
+		// then it should be merged with the existing invalid entry for that same block inside the writeback queue,
+		// which is done by setting the valid bit 1.
 		WQ.entry[index].valid = 1;
 		// (Aditya): ---------------------------------------------------------------------------------------------
 
@@ -2990,7 +3012,7 @@ int CACHE::prefetch_line(uint64_t ip, uint64_t base_addr, uint64_t pf_addr, int 
 				same_page_prefetch_requests++;
 		}
 
-// (Aditya): Debug
+		// (Aditya): Debug
 #ifdef ENABLE_LOGGING
 		cout << "Prefetch issued for block: " << std::hex << pf_packet.address << std::dec << endl;
 #endif
