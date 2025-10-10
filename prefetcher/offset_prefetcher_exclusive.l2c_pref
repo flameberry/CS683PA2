@@ -5,7 +5,7 @@
 #include <map>
 #include <ooo_cpu.h>
 
-#define REGION_TABLE_SIZE 32
+#define REGION_TABLE_SIZE 128
 #define MAX_OFFSETS_PER_REGION 5
 
 using namespace std;

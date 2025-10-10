@@ -21,6 +21,8 @@ uint64_t l2pf_access = 0;
  * ooo_cpu[fill_cpu].L2C for L2C access
  */
 
+#define ENABLE_LOGGING
+
 volatile uint64_t violations = 0;
 
 void assert_exclusivity(PACKET* packet, const std::string& name, CACHE* c1, CACHE* c2 = nullptr, CACHE* c3 = nullptr) {
@@ -90,19 +92,25 @@ void CACHE::handle_fill() {
 		if (cache_type == IS_L1I || cache_type == IS_L1D || cache_type == IS_L2C || cache_type == IS_LLC) {
 			if (MSHR.entry[mshr_index].fill_level < fill_level) {
 				do_bypass = true;
+#ifdef ENABLE_LOGGING
 				cout << "[" << NAME << "]: Bypassing block: " << std::hex << MSHR.entry[mshr_index].address << std::dec << std::endl;
+#endif
 			} else if (fill_level == MSHR.entry[mshr_index].fill_level) {
 				// (Aditya): Invalidating a block from the lower levels in case there was a hit in any of them
 				if (cache_type != IS_LLC) { // && uncore.LLC.check_hit(&MSHR.entry[mshr_index]) >= 0) {
 					if (int inv_way = uncore.LLC.invalidate_entry(MSHR.entry[mshr_index].address); inv_way >= 0) {
 						int inv_set = uncore.LLC.get_set(MSHR.entry[mshr_index].address);
+#ifdef ENABLE_LOGGING
 						cout << "[" << NAME << "]: Invalidating block in LLC: " << std::hex << MSHR.entry[mshr_index].address << std::dec << ", set: " << inv_set << ", way: " << inv_way << std::endl;
+#endif
 					}
 
 					if (cache_type != IS_L2C) { // && ooo_cpu[MSHR.entry[mshr_index].cpu].L2C.check_hit(&MSHR.entry[mshr_index]) >= 0) {
 						if (int inv_way = ooo_cpu[MSHR.entry[mshr_index].cpu].L2C.invalidate_entry(MSHR.entry[mshr_index].address); inv_way >= 0) {
 							int inv_set = ooo_cpu[MSHR.entry[mshr_index].cpu].L2C.get_set(MSHR.entry[mshr_index].address);
+#ifdef ENABLE_LOGGING
 							cout << "[" << NAME << "]: Invalidating block in L2C: " << std::hex << MSHR.entry[mshr_index].address << std::dec << ", set: " << inv_set << ", way: " << inv_way << std::endl;
+#endif
 						}
 					}
 				}
@@ -277,7 +285,9 @@ void CACHE::handle_fill() {
 					writeback_packet.event_cycle = current_core_cycle[fill_cpu];
 
 					lower_level->add_wq(&writeback_packet);
+#ifdef ENABLE_LOGGING
 					cout << "[" << NAME << "]: Inserted into writeback queue of lower level: " << std::hex << writeback_packet.address << std::dec << ", set: " << set << ", way: " << way << std::endl;
+#endif
 				}
 			}
 #ifdef SANITY_CHECK
@@ -291,8 +301,10 @@ void CACHE::handle_fill() {
 
 		if (do_fill) {
 			if (!do_bypass) {
-				// (Aditya): Debug
+// (Aditya): Debug
+#ifdef ENABLE_LOGGING
 				cout << "[" << (MSHR.entry[mshr_index].prefetched ? "Prefetched: " : "") << this->NAME << "]: Evicting address: " << std::hex << (block[set][way].valid ? block[set][way].address : -1) << " from set: " << std::dec << set << ", way: " << way << "; Filling in address: " << std::hex << MSHR.entry[mshr_index].address << std::dec << endl;
+#endif
 				// (Aditya): -----
 
 				//@Vasudha: For PC-offset DTLB prefetcher, in case of eviction, transfer block from training table to trained table
@@ -361,7 +373,9 @@ void CACHE::handle_fill() {
 					if (check_hit(&MSHR.entry[mshr_index]) < 0) {
 						fill_cache(set, way, &MSHR.entry[mshr_index]);
 					} else {
+#ifdef ENABLE_LOGGING
 						cout << "Khel khatam" << endl;
+#endif
 					}
 #ifdef PUSH_DTLB_PB
 				else if (cache_type == IS_DTLB && MSHR.entry[mshr_index].type == PREFETCH_TRANSLATION) {
@@ -695,12 +709,13 @@ void CACHE::handle_writeback() {
 				way = (this->*find_victim)(writeback_cpu, WQ.entry[index].instr_id, set, block[set], WQ.entry[index].ip, WQ.entry[index].full_addr, WQ.entry[index].type);
 
 				uint8_t do_fill = 1;
+				bool bypass_wb = !WQ.entry[index].valid;
 
 				// is this dirty?
 				// if (block[set][way].dirty) {
 
 				// (Aditya): Writeback should be done irrespective of whether the block is dirty
-				if (block[set][way].valid && (cache_type == IS_L1I || cache_type == IS_L1D || cache_type == IS_L2C || block[set][way].dirty)) {
+				if (!bypass_wb && block[set][way].valid && (cache_type == IS_L1I || cache_type == IS_L1D || cache_type == IS_L2C || block[set][way].dirty)) {
 
 					// check if the lower level WQ has enough room to keep this writeback request
 					if (lower_level) {
@@ -729,7 +744,9 @@ void CACHE::handle_writeback() {
 							writeback_packet.event_cycle = current_core_cycle[writeback_cpu];
 
 							lower_level->add_wq(&writeback_packet);
+#ifdef ENABLE_LOGGING
 							cout << "[" << NAME << "]: Inserted into writeback queue of lower level: " << std::hex << writeback_packet.address << std::dec << ", set: " << set << ", way: " << way << std::endl;
+#endif
 						}
 					}
 #ifdef SANITY_CHECK
@@ -742,70 +759,83 @@ void CACHE::handle_writeback() {
 				}
 
 				if (do_fill) {
-					// (Aditya): Debug
-					cout << "[Writeback: " << this->NAME << "]: Evicting address: " << std::hex << (block[set][way].valid ? block[set][way].address : -1) << " from set: " << std::dec << set << ", way: " << way << "; Filling in address: " << std::hex << WQ.entry[index].address << std::dec << endl;
-					// (Aditya): -----
+					// (Aditya): Skip a writeback if the writeback entry is invalid
+					if (!bypass_wb) {
 
-					// update prefetcher
-					if (cache_type == IS_L1I)
-						l1i_prefetcher_cache_fill(writeback_cpu, ((WQ.entry[index].ip) >> LOG2_BLOCK_SIZE) << LOG2_BLOCK_SIZE, set, way, 0, ((block[set][way].ip) >> LOG2_BLOCK_SIZE) << LOG2_BLOCK_SIZE);
-					else if (cache_type == IS_L1D) {
-						// Neelu: Sending virtual fill and evicted address to L1D prefetcher.
-						// l1d_prefetcher_cache_fill(WQ.entry[index].full_addr, set, way, 0, block[set][way].address<<LOG2_BLOCK_SIZE, WQ.entry[index].pf_metadata);
+						// (Aditya): Debug
+#ifdef ENABLE_LOGGING
+						cout << "[Writeback: " << this->NAME << "]: Evicting address: " << std::hex << (block[set][way].valid ? block[set][way].address : -1) << " from set: " << std::dec << set << ", way: " << way << "; Filling in address: " << std::hex << WQ.entry[index].address << std::dec << endl;
+#endif
+						// (Aditya): -----
 
-						uint64_t v_fill_addr, v_evicted_addr;
-						// First, getting virtual address for the fill address
-						auto ppage_check = inverse_table.find(WQ.entry[index].full_addr >> LOG2_PAGE_SIZE);
-						assert(ppage_check != inverse_table.end());
-						v_fill_addr = (ppage_check->second) << LOG2_PAGE_SIZE;
-						v_fill_addr |= (WQ.entry[index].full_addr & ((1 << LOG2_PAGE_SIZE) - 1));
+						// update prefetcher
+						if (cache_type == IS_L1I)
+							l1i_prefetcher_cache_fill(writeback_cpu, ((WQ.entry[index].ip) >> LOG2_BLOCK_SIZE) << LOG2_BLOCK_SIZE, set, way, 0, ((block[set][way].ip) >> LOG2_BLOCK_SIZE) << LOG2_BLOCK_SIZE);
+						else if (cache_type == IS_L1D) {
+							// Neelu: Sending virtual fill and evicted address to L1D prefetcher.
+							// l1d_prefetcher_cache_fill(WQ.entry[index].full_addr, set, way, 0, block[set][way].address<<LOG2_BLOCK_SIZE, WQ.entry[index].pf_metadata);
 
-						// Now getting virtual address for the evicted address
-						/*Neelu: Note that it is not always necessary that evicted address is a valid address and is present in the inverse table, hence (1) do not use the assert and (2) if it is not present, assign it to zero. */
+							uint64_t v_fill_addr, v_evicted_addr;
+							// First, getting virtual address for the fill address
+							auto ppage_check = inverse_table.find(WQ.entry[index].full_addr >> LOG2_PAGE_SIZE);
+							assert(ppage_check != inverse_table.end());
+							v_fill_addr = (ppage_check->second) << LOG2_PAGE_SIZE;
+							v_fill_addr |= (WQ.entry[index].full_addr & ((1 << LOG2_PAGE_SIZE) - 1));
 
-						ppage_check = inverse_table.find(block[set][way].address >> (LOG2_PAGE_SIZE - LOG2_BLOCK_SIZE));
-						if (ppage_check != inverse_table.end()) {
-							v_evicted_addr = (ppage_check->second) << LOG2_PAGE_SIZE;
-							v_evicted_addr |= ((block[set][way].address << LOG2_BLOCK_SIZE) & ((1 << LOG2_PAGE_SIZE) - 1));
-						} else
-							v_evicted_addr = 0;
+							// Now getting virtual address for the evicted address
+							/*Neelu: Note that it is not always necessary that evicted address is a valid address and is present in the inverse table, hence (1) do not use the assert and (2) if it is not present, assign it to zero. */
 
-						l1d_prefetcher_cache_fill(v_fill_addr, WQ.entry[index].full_addr, set, way, 0, v_evicted_addr, block[set][way].address << LOG2_BLOCK_SIZE, WQ.entry[index].pf_metadata);
+							ppage_check = inverse_table.find(block[set][way].address >> (LOG2_PAGE_SIZE - LOG2_BLOCK_SIZE));
+							if (ppage_check != inverse_table.end()) {
+								v_evicted_addr = (ppage_check->second) << LOG2_PAGE_SIZE;
+								v_evicted_addr |= ((block[set][way].address << LOG2_BLOCK_SIZE) & ((1 << LOG2_PAGE_SIZE) - 1));
+							} else
+								v_evicted_addr = 0;
 
-					} else if (cache_type == IS_L2C)
-						// (Manish):  Added one argumnent at the end of just by dafault dummy type but put writeback to cater writebacks in case of exclusive cache prefetcher
-						WQ.entry[index].pf_metadata = l2c_prefetcher_cache_fill(WQ.entry[index].address << LOG2_BLOCK_SIZE, set, way, 0,
-							block[set][way].address << LOG2_BLOCK_SIZE, WQ.entry[index].pf_metadata, WRITEBACK);
-					// (Manish): Ends
-					if (cache_type == IS_LLC) {
-						cpu = writeback_cpu;
-						WQ.entry[index].pf_metadata = llc_prefetcher_cache_fill(WQ.entry[index].address << LOG2_BLOCK_SIZE, set, way, 0,
-							block[set][way].address << LOG2_BLOCK_SIZE, WQ.entry[index].pf_metadata);
-						cpu = 0;
+							l1d_prefetcher_cache_fill(v_fill_addr, WQ.entry[index].full_addr, set, way, 0, v_evicted_addr, block[set][way].address << LOG2_BLOCK_SIZE, WQ.entry[index].pf_metadata);
+
+						} else if (cache_type == IS_L2C)
+							// (Manish):  Added one argumnent at the end of just by dafault dummy type but put writeback to cater writebacks in case of exclusive cache prefetcher
+							WQ.entry[index].pf_metadata = l2c_prefetcher_cache_fill(WQ.entry[index].address << LOG2_BLOCK_SIZE, set, way, 0,
+								block[set][way].address << LOG2_BLOCK_SIZE, WQ.entry[index].pf_metadata, WRITEBACK);
+						// (Manish): Ends
+						if (cache_type == IS_LLC) {
+							cpu = writeback_cpu;
+							WQ.entry[index].pf_metadata = llc_prefetcher_cache_fill(WQ.entry[index].address << LOG2_BLOCK_SIZE, set, way, 0,
+								block[set][way].address << LOG2_BLOCK_SIZE, WQ.entry[index].pf_metadata);
+							cpu = 0;
+						}
+
+						// update replacement policy
+						(this->*update_replacement_state)(writeback_cpu, set, way, WQ.entry[index].full_addr, WQ.entry[index].ip, block[set][way].full_addr, WQ.entry[index].type, 0);
+
+						// COLLECT STATS
+						sim_miss[writeback_cpu][WQ.entry[index].type]++;
+						sim_access[writeback_cpu][WQ.entry[index].type]++;
+
+						// (Aditya): Remove the address in any other cache, before putting it into this cache.
+						// if (cache_type != IS_L1I)
+						// 	ooo_cpu[WQ.entry[index].cpu].L1I.invalidate_entry(WQ.entry[index].address);
+						// if (cache_type != IS_L1D)
+						// 	ooo_cpu[WQ.entry[index].cpu].L1D.invalidate_entry(WQ.entry[index].address);
+						// if (cache_type != IS_L2C)
+						// 	ooo_cpu[WQ.entry[index].cpu].L2C.invalidate_entry(WQ.entry[index].address);
+						// if (cache_type != IS_LLC)
+						// 	uncore.LLC.invalidate_entry(WQ.entry[index].address);
+
+						// (Aditya): Adding asserts here
+						if (cache_type != IS_LLC) {
+							assert_exclusivity(&WQ.entry[index], NAME, &uncore.LLC);
+							if (cache_type != IS_L2C)
+								assert_exclusivity(&WQ.entry[index], NAME, &ooo_cpu[WQ.entry[index].cpu].L2C);
+						}
+						// (Aditya): ------------------------------------------------------------------------
+
+						fill_cache(set, way, &WQ.entry[index]);
+
+						// mark dirty
+						block[set][way].dirty = 1;
 					}
-
-					// update replacement policy
-					(this->*update_replacement_state)(writeback_cpu, set, way, WQ.entry[index].full_addr, WQ.entry[index].ip, block[set][way].full_addr, WQ.entry[index].type, 0);
-
-					// COLLECT STATS
-					sim_miss[writeback_cpu][WQ.entry[index].type]++;
-					sim_access[writeback_cpu][WQ.entry[index].type]++;
-
-					// (Aditya): Remove the address in any other cache, before putting it into this cache.
-					// if (cache_type != IS_L1I)
-					// 	ooo_cpu[WQ.entry[index].cpu].L1I.invalidate_entry(WQ.entry[index].address);
-					// if (cache_type != IS_L1D)
-					// 	ooo_cpu[WQ.entry[index].cpu].L1D.invalidate_entry(WQ.entry[index].address);
-					// if (cache_type != IS_L2C)
-					// 	ooo_cpu[WQ.entry[index].cpu].L2C.invalidate_entry(WQ.entry[index].address);
-					// if (cache_type != IS_LLC)
-					// 	uncore.LLC.invalidate_entry(WQ.entry[index].address);
-					// (Aditya): ------------------------------------------------------------------------
-
-					fill_cache(set, way, &WQ.entry[index]);
-
-					// mark dirty
-					block[set][way].dirty = 1;
 
 					// check fill level
 					if (WQ.entry[index].fill_level < fill_level) {
@@ -2388,11 +2418,19 @@ int CACHE::add_rq(PACKET* packet) {
 		wq_index = WQ.check_queue(packet);
 
 	if (wq_index != -1) {
-
 		if (WQ.entry[wq_index].cpu != packet->cpu) {
 			cout << "Read request from CPU " << packet->cpu << " merging with Write request from CPU " << WQ.entry[wq_index].cpu << endl;
 			assert(0);
 		}
+
+		// (Aditya): Invalidate the entry in the writeback queue
+		// ... as we are returning the packet to upper levels as a part of hit
+		WQ.entry[wq_index].valid = 0;
+
+#ifdef ENABLE_LOGGING
+		cout << "[" << NAME << "]: Writeback hit: " << std::hex << packet->address << std::dec << endl;
+#endif
+		// (Aditya): -----
 
 		// Neelu: 1 cycle WQ forwarding latency added.
 		if (packet->event_cycle < current_core_cycle[packet->cpu])
@@ -2746,11 +2784,14 @@ int CACHE::add_wq(PACKET* packet) {
 		index = WQ.check_queue(packet);
 
 	if (index != -1) {
-
 		if (WQ.entry[index].cpu != packet->cpu) {
 			cout << "Write request from CPU " << packet->cpu << " merging with Write request from CPU " << WQ.entry[index].cpu << endl;
 			assert(0);
 		}
+
+		// (Aditya): if the existing writeback packet is invalid, then we can set it to valid as a part of merging
+		WQ.entry[index].valid = 1;
+		// (Aditya): ---------------------------------------------------------------------------------------------
 
 		WQ.MERGED++;
 		WQ.ACCESS++;
@@ -2949,8 +2990,10 @@ int CACHE::prefetch_line(uint64_t ip, uint64_t base_addr, uint64_t pf_addr, int 
 				same_page_prefetch_requests++;
 		}
 
-		// (Aditya): Debug
+// (Aditya): Debug
+#ifdef ENABLE_LOGGING
 		cout << "Prefetch issued for block: " << std::hex << pf_packet.address << std::dec << endl;
+#endif
 		// (Aditya): -----
 
 		return 1;
@@ -3261,7 +3304,7 @@ int CACHE::add_pq(PACKET* packet) {
 	else
 		PQ.entry[index].event_cycle += LATENCY;
 
-	// Neelu: Adding condition to mark translated as INFLIGHT only if it is COMPLETED.
+// Neelu: Adding condition to mark translated as INFLIGHT only if it is COMPLETED.
 #ifndef NO_TRANSLATION_PENALTY_FOR_PREFETCHES
 	if (cache_type == IS_L1D) {
 	#ifdef PUSH_PREFETCHES_FROM_L2_TO_L1

@@ -71,7 +71,8 @@ class DRAM_ARRAY {
 // message packet
 class PACKET {
   public:
-    uint8_t instruction,
+    uint8_t valid = 1, // (Aditya): Added a valid bit to allow invalidation to a packet in case of writeback packet
+        instruction,
 	    is_data,
 	    fill_l1i,
 	    fill_l1d, 
@@ -145,8 +146,9 @@ class PACKET {
              cycle_enqueued;
 
     PACKET() {
+        valid = 1;
         instruction = 0;
-	is_data = 1;
+        is_data = 1;
         fill_l1i = 0;
         fill_l1d = 0;
 
