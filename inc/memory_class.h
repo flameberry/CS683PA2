@@ -32,7 +32,7 @@ class MEMORY {
     virtual int  add_rq(PACKET *packet) = 0;
     virtual int  add_wq(PACKET *packet) = 0;
     virtual int  add_pq(PACKET *packet) = 0;
-    virtual void return_data(PACKET *packet) = 0;
+    virtual void return_data(PACKET *packet, bool is_bypassed = false) = 0;
     virtual void operate() = 0;
     virtual void increment_WQ_FULL(uint64_t address) = 0;
     virtual uint32_t get_occupancy(uint8_t queue_type, uint64_t address) = 0;

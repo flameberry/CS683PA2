@@ -21,7 +21,7 @@ uint64_t l2pf_access = 0;
  * ooo_cpu[fill_cpu].L2C for L2C access
  */
 
-#define ENABLE_LOGGING
+// #define ENABLE_LOGGING
 
 volatile uint64_t violations = 0;
 
@@ -89,10 +89,19 @@ void CACHE::handle_fill() {
 
 		// (Aditya): Any block whose fill level is lower than current cache level should be bypassed to that fill level
 		// i.e. the block won't be filled in the current level.
-		bool do_bypass = false;
+		bool do_bypass = false, upper_level_do_bypass = false;
 		if (cache_type == IS_L1I || cache_type == IS_L1D || cache_type == IS_L2C || cache_type == IS_LLC) {
+
 			if (MSHR.entry[mshr_index].fill_level < fill_level) {
 				do_bypass = true;
+
+				// This subsection is to figure out whether this block will be bypassed from the immediate upper level too
+				if (cache_type == IS_LLC) {
+					CACHE* upper_level_cache = &ooo_cpu[fill_cpu].L2C;
+					if (MSHR.entry[mshr_index].fill_level < upper_level_cache->fill_level)
+						upper_level_do_bypass = true;
+				}
+
 #ifdef ENABLE_LOGGING
 				cout << "[" << NAME << "]: Bypassing block: " << std::hex << MSHR.entry[mshr_index].address << std::dec << std::endl;
 #endif
@@ -486,22 +495,22 @@ void CACHE::handle_fill() {
 
 				} else if (cache_type == IS_L2C) {
 					if (MSHR.entry[mshr_index].send_both_cache) {
-						upper_level_icache[fill_cpu]->return_data(&MSHR.entry[mshr_index]);
-						upper_level_dcache[fill_cpu]->return_data(&MSHR.entry[mshr_index]);
+						upper_level_icache[fill_cpu]->return_data(&MSHR.entry[mshr_index], upper_level_do_bypass);
+						upper_level_dcache[fill_cpu]->return_data(&MSHR.entry[mshr_index], upper_level_do_bypass);
 					} else if (MSHR.entry[mshr_index].fill_l1i || MSHR.entry[mshr_index].fill_l1d) {
 						if (MSHR.entry[mshr_index].fill_l1i)
-							upper_level_icache[fill_cpu]->return_data(&MSHR.entry[mshr_index]);
+							upper_level_icache[fill_cpu]->return_data(&MSHR.entry[mshr_index], upper_level_do_bypass);
 						if (MSHR.entry[mshr_index].fill_l1d)
-							upper_level_dcache[fill_cpu]->return_data(&MSHR.entry[mshr_index]);
+							upper_level_dcache[fill_cpu]->return_data(&MSHR.entry[mshr_index], upper_level_do_bypass);
 					} else if (MSHR.entry[mshr_index].instruction)
-						upper_level_icache[fill_cpu]->return_data(&MSHR.entry[mshr_index]);
+						upper_level_icache[fill_cpu]->return_data(&MSHR.entry[mshr_index], upper_level_do_bypass);
 					else if (MSHR.entry[mshr_index].is_data)
-						upper_level_dcache[fill_cpu]->return_data(&MSHR.entry[mshr_index]);
+						upper_level_dcache[fill_cpu]->return_data(&MSHR.entry[mshr_index], upper_level_do_bypass);
 				} else {
 					if (MSHR.entry[mshr_index].instruction)
-						upper_level_icache[fill_cpu]->return_data(&MSHR.entry[mshr_index]);
+						upper_level_icache[fill_cpu]->return_data(&MSHR.entry[mshr_index], upper_level_do_bypass);
 					else // data
-						upper_level_dcache[fill_cpu]->return_data(&MSHR.entry[mshr_index]);
+						upper_level_dcache[fill_cpu]->return_data(&MSHR.entry[mshr_index], upper_level_do_bypass);
 				}
 			}
 
@@ -3389,7 +3398,7 @@ int CACHE::check_writeBack(PACKET* packet) {
 }
 // (Manish):  Ends
 
-void CACHE::return_data(PACKET* packet) {
+void CACHE::return_data(PACKET* packet, bool is_bypassed) {
 	// check MSHR information
 	int mshr_index = check_nonfifo_queue(&MSHR, packet, true); //@Vishal: Updated from check_mshr
 
@@ -3425,10 +3434,13 @@ void CACHE::return_data(PACKET* packet) {
 	MSHR.entry[mshr_index].pf_metadata = packet->pf_metadata;
 
 	// ADD LATENCY
-	if (MSHR.entry[mshr_index].event_cycle < current_core_cycle[packet->cpu])
-		MSHR.entry[mshr_index].event_cycle = current_core_cycle[packet->cpu] + LATENCY;
-	else
-		MSHR.entry[mshr_index].event_cycle += LATENCY;
+	// (Aditya): LATENCY should be added only when the block is not bypassed
+	if (!is_bypassed) {
+		if (MSHR.entry[mshr_index].event_cycle < current_core_cycle[packet->cpu])
+			MSHR.entry[mshr_index].event_cycle = current_core_cycle[packet->cpu] + LATENCY;
+		else
+			MSHR.entry[mshr_index].event_cycle += LATENCY;
+	}
 
 	update_fill_cycle();
 

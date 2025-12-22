@@ -867,7 +867,7 @@ int PAGE_TABLE_WALKER::add_pq(PACKET *packet)
     return -1;
 }
 
-void PAGE_TABLE_WALKER::return_data(PACKET *packet)
+void PAGE_TABLE_WALKER::return_data(PACKET *packet, bool is_bypassed)
 {
 
     int mshr_index = -1;

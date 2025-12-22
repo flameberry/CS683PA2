@@ -109,7 +109,7 @@ class PAGE_TABLE_WALKER : public MEMORY {
          add_pq(PACKET *packet);
     int  check_mshr(PACKET *packet);
 
-    void return_data(PACKET *packet),
+    void return_data(PACKET *packet, bool is_bypassed = false),
          operate(),
          increment_WQ_FULL(uint64_t address),
          fill_mmu_cache(CACHE &cache, uint64_t next_level_base_addr, PACKET *packet, uint8_t cache_type),

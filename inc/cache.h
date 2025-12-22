@@ -297,7 +297,7 @@ class CACHE : public MEMORY {
          add_wq(PACKET *packet),
          add_pq(PACKET *packet);
 
-    void return_data(PACKET *packet),
+    void return_data(PACKET *packet, bool is_bypassed = false),
          operate(),
          increment_WQ_FULL(uint64_t address);
 
